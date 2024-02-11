@@ -10,6 +10,7 @@ class DbConfigVis:
             logger.debug(f"SQLite Database Version is: {version}")
         except sqlite3.Error as error:
             logger.error("Error while connecting to SQLite", error)
+            exit(1)
 
     def create_tables(self, logger):
         cursor = self.con.cursor()

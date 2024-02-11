@@ -10,7 +10,7 @@
             "request": "launch",
             "program": "analyse.py",
             "console": "integratedTerminal",
-            "args": ["D:/Git/WIS-HDSR/opvlw_validatie/FEWS/Config", "./db/configvis_wishdsr.db3"]
+            "args": ["D:/REPOS/HDSR-WIS/opvlw_validatie/FEWS/Config", "../db/configvis_wishdsr.db3"]
         },
         {
             "name": "explore",
@@ -18,7 +18,7 @@
             "request": "launch",
             "program": "explore.py",
             "console": "integratedTerminal",
-            "args": ["./db/configvis_wishdsr.db3", "16"]
+            "args": ["../db/configvis_wishdsr.db3", "16"]
         }
     ]
 }
