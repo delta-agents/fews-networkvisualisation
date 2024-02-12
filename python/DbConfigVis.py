@@ -54,7 +54,7 @@ class DbConfigVis:
                 modins TEXT NOT NULL,
                 props_set_id INTEGER,
                 CONSTRAINT PK_modins_calls PRIMARY KEY (id, call_stack_id),
-                FOREIGN KEY(props_set_id) REFERENCES props_set(id),
+                FOREIGN KEY(props_set_id) REFERENCES props_sets(id),
                 FOREIGN KEY(call_stack_id) REFERENCES call_stacks(id))"""
         cursor.execute(dll_modins_calls_table)
         logger.info("modins_calls table created")
