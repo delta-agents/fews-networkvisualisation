@@ -172,6 +172,10 @@ class DbConfigVis:
         row = self.con.execute("SELECT count(*) FROM call_stacks").fetchone()
         return row[0]
 
+    def get_n_modins_calls(self):
+        row = self.con.execute("SELECT count(*) FROM modins_calls").fetchone()
+        return row[0]
+
     def add_call_stack_and_props(self, moduleConfigFileName, current_call_stack, current_properties_set, logger):
         try:
             cursor = self.con.cursor()

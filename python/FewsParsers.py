@@ -196,11 +196,11 @@ class Modins_parser:
 
     @staticmethod
     def parse_modins(db, config_root, logger):
-        n_call_stacks = db.get_n_call_stacks()
-        logger.info(f"Looping over {n_call_stacks}")
+        n_modins_calls = db.get_n_modins_calls()
+        logger.info(f"Looping over {n_modins_calls}")
         i_call_stacks = 1
         for mic_id, modins_fn, cs_id, ps_id in db.list_modins():
-            logger.info(f"{i_call_stacks}/{n_call_stacks}: {modins_fn}")
+            logger.info(f"{i_call_stacks}/{n_modins_calls}: {modins_fn}")
             i_call_stacks = i_call_stacks + 1
 
             # get properties set for this modins
