@@ -15,23 +15,6 @@ class DbConfigVis:
     def create_tables(self, logger):
         cursor = self.con.cursor()
 
-        dll_wfs_table = """CREATE TABLE wfs (
-                id TEXT NOT NULL, 
-                description TEXT NOT NULL, 
-                filename TEXT NOT NULL, 
-                CONSTRAINT PK_wfs PRIMARY KEY (id))"""
-        cursor.execute(dll_wfs_table)
-        logger.info("wfs table created")
-
-        dll_wfd_props_table = """CREATE TABLE wfd_props (
-                wf_id TEXT NOT NULL, 
-                key TEXT NOT NULL, 
-                value TEXT NOT NULL,
-                FOREIGN KEY(wf_id) REFERENCES wfs(id),
-                CONSTRAINT PK_wfd_props PRIMARY KEY (wf_id, key))"""
-        cursor.execute(dll_wfd_props_table)
-        logger.info("wfd_props table created")
-
         dll_props_sets_table = """CREATE TABLE props_sets (
                 id INTEGER NOT NULL, 
                 key TEXT NOT NULL, 
@@ -40,8 +23,18 @@ class DbConfigVis:
         cursor.execute(dll_props_sets_table)
         logger.info("props_sets table created")
 
+        dll_wfs_table = """CREATE TABLE wfs (
+                id TEXT NOT NULL, 
+                description TEXT NOT NULL, 
+                filename TEXT NOT NULL,
+                props_set_id INTEGER,
+                FOREIGN KEY(props_set_id) REFERENCES props_sets(id),
+                CONSTRAINT PK_wfs PRIMARY KEY (id))"""
+        cursor.execute(dll_wfs_table)
+        logger.info("wfs table created")
+
         dll_call_stacks_table = """CREATE TABLE call_stacks (
-                id INTEGER NOT NULL, 
+                id INTEGER NOT NULL,
                 ilevel INTEGER NOT NULL,
                 wffn TEXT NOT NULL,
                 CONSTRAINT PK_call_stacks PRIMARY KEY (id, ilevel))"""
@@ -176,6 +169,33 @@ class DbConfigVis:
         row = self.con.execute("SELECT count(*) FROM modins_calls").fetchone()
         return row[0]
 
+    def get_max_props_sets_id(self):
+        cps_row = self.con.execute("SELECT MAX(id) FROM props_sets").fetchone()
+        if cps_row[0] is None:
+            return 0
+        else:
+            return int(cps_row[0])
+
+    def insert_props_set(self, properties_set, logger) -> int:
+        new_ps_id = self.get_max_props_sets_id() + 1
+        try:
+            cursor = self.con.cursor()
+            for key, value in properties_set.items():
+                data = (new_ps_id, key, value)
+                try:
+                    insert_statement = """INSERT INTO 'props_sets' ('id','key','value') VALUES (?, ?, ?);"""
+                    logger.debug("INSERT INTO props_sets: {}".format(data))
+                    cursor.execute(insert_statement, data)
+                except sqlite3.IntegrityError as error:
+                    logger.error(error)
+                    logger.warn("property overwritten: {}: {}".format(key, value))
+                    update_statement = """UPDATE 'props_sets' SET value = ? WHERE id = ? AND key = ?"""
+                    cursor.execute(update_statement, (value, new_ps_id, key))
+        finally:
+            self.con.commit()
+            cursor.close()
+            return new_ps_id
+
     def add_call_stack_and_props(self, moduleConfigFileName, current_call_stack, current_properties_set, logger):
         try:
             cursor = self.con.cursor()
@@ -192,25 +212,8 @@ class DbConfigVis:
                 cursor.execute(insert_statement, data)
 
             # properties set can be empty
-            if len(current_properties_set) > 0:
-                # cps-id
-                cps_row = self.con.execute("SELECT MAX(id) FROM props_sets").fetchone()
-                if cps_row[0] is None:
-                    cps_id = 1
-                else:
-                    cps_id = int(cps_row[0]) + 1
-                # create a new cps
-                for key, value in current_properties_set.items():
-                    data = (cps_id, key, value)
-                    try:
-                        insert_statement = """INSERT INTO 'props_sets' ('id','key','value') VALUES (?, ?, ?);"""
-                        logger.debug("INSERT INTO props_sets: {}".format(data))
-                        cursor.execute(insert_statement, data)
-                    except sqlite3.IntegrityError as error:
-                        logger.error(error)
-                        logger.warn("property overwritten: {}: {}; call stack: {}".format(key, value, current_call_stack))
-                        update_statement = """UPDATE 'props_sets' SET value = ? WHERE id = ? AND key = ?"""
-                        cursor.execute(update_statement, (value, cps_id, key))
+            if current_properties_set and len(current_properties_set) > 0:
+                cps_id = self.insert_props_set(current_properties_set, logger)
             else:
                 cps_id = None
 
@@ -227,34 +230,15 @@ class DbConfigVis:
             self.con.commit()
             cursor.close()
         
-    def wfs_insert(self, wf_id, wf_desc, wf_fn):
+    def wfs_insert(self, wf_id, wf_desc, wf_fn, cps_id):
         try:
             cursor = self.con.cursor()
-            data = (wf_id, wf_desc, wf_fn)
-            insert_statement = """INSERT INTO 'wfs' ('id','description','filename') VALUES (?, ?, ?);"""
+            data = (wf_id, wf_desc, wf_fn, cps_id)
+            insert_statement = """INSERT INTO 'wfs' ('id','description','filename', 'props_set_id') VALUES (?, ?, ?, ?);"""
             cursor.execute(insert_statement, data)
         finally:
             self.con.commit()
             cursor.close()
-
-    def wfd_props_insert(self, wf_id, key, value):
-        try:
-            cursor = self.con.cursor()
-            data = (wf_id, key, value)
-            insert_statement = """INSERT INTO 'wfd_props' ('wf_id','key','value') VALUES (?, ?, ?);"""
-            cursor.execute(insert_statement, data)
-        finally:
-            self.con.commit()
-            cursor.close()
-
-    def get_wfd_props(self, wf_id, logger):
-        try:
-            props = {}
-            for row in self.con.execute("SELECT key, value FROM wfd_props WHERE wf_id =:wf_id", {"wf_id": wf_id}).fetchall():
-                props[row[0]] = row[1]
-            return props
-        except sqlite3.Error as error:
-            logger.error("Error while connecting to sqlite (get_wfd_props)", error)
 
     def get_workflow_filename(self, wf_id, logger):
         try:
@@ -268,7 +252,7 @@ class DbConfigVis:
             logger.error("Error get_workflow_filename: ", error)
 
     def list_wfs(self):
-        return self.con.execute("SELECT id, filename FROM wfs").fetchall()
+        return self.con.execute("SELECT id, filename, props_set_id FROM wfs").fetchall()
 
     def list_modins(self):
         return self.con.execute("SELECT id, modins, call_stack_id, props_set_id FROM modins_calls ORDER BY modins ASC").fetchall()
@@ -276,8 +260,7 @@ class DbConfigVis:
     def get_props_set(self, id, logger):
         try:
             props = {}
-            for row in self.con.execute("SELECT key, value FROM props_sets WHERE id =:id", {"id": id}).fetchall():
-                props[row[0]] = row[1]
+            [props.update({row[0]: row[1]}) for row in self.con.execute("SELECT key, value FROM props_sets WHERE id =:id", {"id": id}).fetchall()]
             return props
         except sqlite3.Error as error:
             logger.error("Error get_props_set: ", error)
@@ -352,8 +335,7 @@ class DbConfigVis:
         try:
             links = set()
             data = {"tss_id": tss_id, "inout": direction}
-            for row in self.con.execute("SELECT * FROM links WHERE tss_id =:tss_id AND inout =:inout", data).fetchall():
-                links.add(row)
+            [links.add(row) for row in self.con.execute("SELECT * FROM links WHERE tss_id =:tss_id AND inout =:inout", data).fetchall()]
             return links
         except sqlite3.Error as error:
             logger.error(error)
@@ -362,8 +344,7 @@ class DbConfigVis:
         try:
             links = set()
             data = {"trafo_id": trafo_id, "inout": direction}
-            for row in self.con.execute("SELECT * FROM links WHERE trafo_id =:trafo_id AND inout =:inout", data).fetchall():
-                links.add(row)
+            [links.add(row) for row in self.con.execute("SELECT * FROM links WHERE trafo_id =:trafo_id AND inout =:inout", data).fetchall()]
             return links
         except sqlite3.Error as error:
             logger.error(error)

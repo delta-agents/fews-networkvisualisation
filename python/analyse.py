@@ -2,7 +2,7 @@ import fire
 import logging
 from pathlib import Path
 from DbConfigVis import DbConfigVis
-from FewsParsers import TimeseriesSetParser, Workflows_parser, Modins_parser, Endpoint_parsers, CoefficientSet_parser
+from FewsParsers import Workflows_parser, TimeseriesSetParser, Modins_parser, Endpoint_parsers, CoefficientSet_parser
 
 
 logger = logging.getLogger(__name__)
@@ -13,6 +13,8 @@ def delete_old_database(dbpath):
     if p.exists():
         p.unlink()
         logger.info("Existing db deleted")
+
+# TODO: overwriting properties within the samen call stack should issue a warning
 
 #=======================================================================================
 # MAIN PROGRAM
@@ -25,10 +27,12 @@ def main(croot, dbpath):
     db = DbConfigVis(dbpath, logger)
     db.create_tables(logger)
 
-    # parsing workflow descriptors and workflow files
+    # parsing workflow descriptors
     Workflows_parser.parse_workflows(config_root, db, logger)
+    # parsing workflow files
+    Workflows_parser.loop_workflows(config_root, db, logger)
 
-    #db.close(logger)
+    db.close(logger)
     #db.clear_tables(logger)
 
     # parsing TimeSteps

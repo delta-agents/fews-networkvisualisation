@@ -22,12 +22,10 @@ class TimeseriesSetParser:
     @staticmethod
     def parse_timestep_id_file(tsid_path, logger):
         logger.debug(f"Parsing {tsid_path}")
-        tsid_tree = ET.parse(tsid_path)
-        tsid_root = tsid_tree.getroot()
+        tsid_root = ET.parse(tsid_path).getroot()
         for ts in tsid_root.findall('fews:timeStep', ns):
             timestep = {'multiplier': "", 'unit': "", 'timeZone': ""}
-            for key, value in ts.attrib.items():
-                timestep[key] = value
+            [timestep.update({key: value}) for key, value in ts.attrib.items()]
             timestepstring = "{}{}{}".format(timestep['multiplier'], timestep['unit'], timestep['timeZone'])
             tsid_map[timestep['id']] = timestepstring
 
@@ -49,8 +47,7 @@ class TimeseriesSetParser:
                 qualifiers = q
 
         timestep = {'id': "", 'multiplier': "", 'unit': "", 'timeZone': ""}
-        for key, value in root_tss.find('fews:timeStep', ns).items():
-            timestep[key] = Helpers.solve_props(value, props)
+        [timestep.update({key: Helpers.solve_props(value, props)}) for key, value in root_tss.find('fews:timeStep', ns).items()]
         if timestep.get('id'):
             timestepstring = tsid_map[timestep['id']]
         else:
@@ -63,8 +60,7 @@ class Workflows_parser:
     def get_props(root, props):
         new_props = copy.deepcopy(props)
         try:
-            for prop in root.find('fews:properties', ns):
-                new_props[prop.attrib["key"]] = prop.attrib["value"]
+            [new_props.update({prop.attrib["key"]: prop.attrib["value"]}) for prop in root.find('fews:properties', ns)]
         finally:
             return new_props
 
@@ -81,8 +77,7 @@ class Workflows_parser:
         # load wf_file into tree
         wffn = db.get_workflow_filename(wf_id, logger)
         wf_filepath = Workflows_parser.get_path_of_workflowfile(config_root, wffn)
-        wf_tree = ET.parse(wf_filepath)
-        wf_root = wf_tree.getroot()
+        wf_root = ET.parse(wf_filepath).getroot()
 
         # read wff global properties and add/overwrite cps
         cps = Workflows_parser.get_props(wf_root, cps)
@@ -116,8 +111,7 @@ class Workflows_parser:
 
     @staticmethod
     def parse_workflows(config_root, db, logger):
-        tree = ET.parse(config_root/"RegionConfigFiles/WorkflowDescriptors.xml")
-        root = tree.getroot()
+        root = ET.parse(config_root/"RegionConfigFiles/WorkflowDescriptors.xml").getroot()
 
         for wfd in root.findall('fews:workflowDescriptor', ns):
             wf_id = wfd.attrib["id"]
@@ -126,21 +120,35 @@ class Workflows_parser:
                 workflowFileName = wfd.find('fews:workflowFileName', ns).text
             except AttributeError:
                 workflowFileName = wf_id
-            db.wfs_insert(wf_id, description, workflowFileName)
 
             # optional properties
-            for props in wfd.findall('fews:properties', ns):
-                [db.wfd_props_insert(wf_id, prop.attrib["key"], prop.attrib["value"]) for prop in props if prop.tag != r'{http://www.wldelft.nl/fews}description']
-            for props in wfd.findall('fews:moduleConfigProperties', ns):
-                [db.wfd_props_insert(wf_id, prop.attrib["key"], prop.attrib["value"]) for prop in props if prop.tag != r'{http://www.wldelft.nl/fews}description']
+            current_properties_set = {}
+            for properties in wfd.findall('fews:properties', ns):
+                [current_properties_set.update({x.attrib["key"]: x.attrib["value"]}) for x in properties if x.tag != r'{http://www.wldelft.nl/fews}description']
+            for properties in wfd.findall('fews:moduleConfigProperties', ns):
+                [current_properties_set.update({x.attrib["key"]: x.attrib["value"]}) for x in properties if x.tag != r'{http://www.wldelft.nl/fews}description']
  
+            # properties set can be empty
+            if len(current_properties_set) > 0:
+                cps_id = db.insert_props_set(current_properties_set, logger)
+            else:
+                cps_id = None
+
+            db.wfs_insert(wf_id, description, workflowFileName, cps_id)
+
+    @staticmethod
+    def loop_workflows(config_root, db, logger):
         # start looping through workflowfiles
         ncount = 0
         for row in db.list_wfs():
             ncount = ncount + 1
             wf_id = row[0]
+            props_set_id = row[2]
             # create dictionary of current properties set (cps) from wfd_props
-            cps = db.get_wfd_props(wf_id, logger)
+            if props_set_id:
+                cps = db.get_props_set(props_set_id, logger)
+            else:
+                cps = {}
             # create array with the current call stack (ccs) from wfs
             ccs = [wf_id]
 
@@ -152,8 +160,7 @@ class Endpoint_parsers:
     @staticmethod
     def parse_endpoint(db, config_root, type, logger):
         for cf_filepath in config_root.glob(f"**/*.xml"):
-            cf_tree = ET.parse(cf_filepath)
-            cf_root = cf_tree.getroot()
+            cf_root = ET.parse(cf_filepath).getroot()
             if cf_root.tag == r'{http://www.wldelft.nl/fews}' + type:
                 logger.info(cf_filepath)
                 for itss in Helpers.find_element_recursive(cf_root, 'fews:timeSeriesSet', [], ns, logger):
@@ -207,8 +214,7 @@ class Modins_parser:
             props = db.get_props_set(ps_id, logger)
 
             mi_file_path = Modins_parser.get_path_of_modinsfile(config_root, modins_fn)
-            mi_tree = ET.parse(mi_file_path)
-            mi_root = mi_tree.getroot()
+            mi_root = ET.parse(mi_file_path)
 
             if mi_root.tag == r'{http://www.wldelft.nl/fews}transformationModule':
                 # collect variables
@@ -339,8 +345,7 @@ class CoefficientSet_parser:
     @staticmethod
     def parse(config_root, logger):
         for cf_filepath in (config_root).glob(f"**/*.xml"):
-            cf_tree = ET.parse(cf_filepath)
-            cf_root = cf_tree.getroot()
+            cf_root = ET.parse(cf_filepath).getroot()
             if cf_root.tag == r'{http://www.wldelft.nl/fews}' + 'transformationCoefficientSets':
                 logger.debug(cf_filepath)
                 for ics in Helpers.find_element_recursive(cf_root, 'fews:coefficientSet', [], ns, logger):
