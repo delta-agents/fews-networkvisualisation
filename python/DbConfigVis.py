@@ -1,6 +1,5 @@
 import sqlite3
 
-
 class DbConfigVis:
     def __init__(self, dbpath, logger):
         try:
@@ -23,21 +22,16 @@ class DbConfigVis:
         cursor.execute(dll_props_sets_table)
         logger.info("props_sets table created")
 
-        dll_wfs_table = """CREATE TABLE wfs (
-                id TEXT NOT NULL, 
-                description TEXT NOT NULL, 
-                filename TEXT NOT NULL,
-                props_set_id INTEGER,
-                FOREIGN KEY(props_set_id) REFERENCES props_sets(id),
-                CONSTRAINT PK_wfs PRIMARY KEY (id))"""
-        cursor.execute(dll_wfs_table)
-        logger.info("wfs table created")
-
         dll_call_stacks_table = """CREATE TABLE call_stacks (
                 id INTEGER NOT NULL,
-                ilevel INTEGER NOT NULL,
+                wf_id TEXT NOT NULL,
+                desc TEXT,
                 wffn TEXT NOT NULL,
-                CONSTRAINT PK_call_stacks PRIMARY KEY (id, ilevel))"""
+                parent_id INTEGER,
+                props_set_id INTEGER,
+                CONSTRAINT PK_call_stacks PRIMARY KEY (id),
+                FOREIGN KEY(props_set_id) REFERENCES props_sets(id),
+                FOREIGN KEY(parent_id) REFERENCES call_stacks(id))"""
         cursor.execute(dll_call_stacks_table)
         logger.info("call_stacks table created")
 
@@ -100,12 +94,34 @@ class DbConfigVis:
         self.con.commit()
         logger.info("Database created")
 
-    def get_call_stack_from_id(self, id, logger):
+    def get_n_call_stacks(self):
+        row = self.con.execute("SELECT count(*) FROM call_stacks").fetchone()
+        return row[0]
+
+    def get_n_modins_calls(self):
+        row = self.con.execute("SELECT count(*) FROM modins_calls").fetchone()
+        return row[0]
+
+    def get_max_trafos_id(self) -> int:
+        row = self.con.execute("SELECT MAX(id) FROM trafos").fetchone()
+        return int(row[0]) if row[0] else 0
+
+    def get_max_call_stacks_id(self) -> int:
+        row = self.con.execute("SELECT MAX(id) FROM call_stacks").fetchone()
+        return int(row[0]) if row[0] else 0
+
+    def get_max_props_sets_id(self) -> int:
+        row = self.con.execute("SELECT MAX(id) FROM props_sets").fetchone()
+        return int(row[0]) if row[0] else 0
+
+    def get_max_modins_calls_id(self) -> int:
+        row = self.con.execute("SELECT MAX(id) FROM modins_calls").fetchone()
+        return int(row[0]) if row[0] else 0
+
+    def get_call_stack_from_wfid(self, wf_id, logger):
         try:
-            cs = []
             cursor = self.con.cursor()
-            for row in self.con.execute("SELECT wffn FROM call_stacks WHERE id =:id ORDER BY ilevel", {"id": id}).fetchall():
-                cs.append[row[0]]
+            cs = self.con.execute("SELECT id, desc, wffn, props_set_id FROM call_stacks WHERE wf_id =:wf_id", {"wf_id": wf_id}).fetchone()
         except sqlite3.Error as error:
             logger.error(error)
         finally:
@@ -114,10 +130,10 @@ class DbConfigVis:
 
     def get_tss(self, tss_id, logger):
         try:
-            tss_row = self.con.execute("SELECT * FROM ts_sets WHERE id =:id", {"id": tss_id}).fetchone()
-            return tss_row
+            return self.con.execute("SELECT * FROM ts_sets WHERE id =:id", {"id": tss_id}).fetchone()
         except sqlite3.Error as error:
             logger.error(error)
+            raise
 
     def get_trafo_id(self, mic_id, ord_nr, desc, logger):
         try:
@@ -125,11 +141,7 @@ class DbConfigVis:
             # find trafo_id
             trafo_row = self.con.execute("SELECT id FROM trafos WHERE mic_id=:mic_id AND ord_nr=:ord_nr", {"mic_id": mic_id, "ord_nr": ord_nr}).fetchone()
             if trafo_row is None:
-                trafo_row = self.con.execute("SELECT MAX(id) FROM trafos").fetchone()
-                if trafo_row[0] is None:
-                    trafo_id = 1
-                else:
-                    trafo_id = trafo_row[0] + 1
+                trafo_id = self.get_max_trafos_id() + 1
                 insert_statement = """INSERT INTO 'trafos' ('id','mic_id','ord_nr','desc') VALUES (?, ?, ?, ?);"""
                 cursor.execute(insert_statement, (trafo_id, mic_id, ord_nr, desc))
                 self.con.commit()
@@ -137,6 +149,7 @@ class DbConfigVis:
                 trafo_id = trafo_row[0]
         except sqlite3.Error as error:
             logger.error(error)
+            raise
         finally:
             cursor.close()
             return trafo_id
@@ -152,6 +165,7 @@ class DbConfigVis:
             pass
         except sqlite3.Error as error:
             logger.warn(error)
+            raise
         finally:
             cursor.close()
 
@@ -161,22 +175,9 @@ class DbConfigVis:
     def add_output(self, mic_id, ord_nr, desc, tss_id, logger):
         self.add_inoutput(mic_id, ord_nr, desc, tss_id, 'out', logger)
 
-    def get_n_call_stacks(self):
-        row = self.con.execute("SELECT count(*) FROM call_stacks").fetchone()
-        return row[0]
-
-    def get_n_modins_calls(self):
-        row = self.con.execute("SELECT count(*) FROM modins_calls").fetchone()
-        return row[0]
-
-    def get_max_props_sets_id(self):
-        cps_row = self.con.execute("SELECT MAX(id) FROM props_sets").fetchone()
-        if cps_row[0] is None:
-            return 0
-        else:
-            return int(cps_row[0])
-
     def insert_props_set(self, properties_set, logger) -> int:
+        if not properties_set:
+            return None
         new_ps_id = self.get_max_props_sets_id() + 1
         try:
             cursor = self.con.cursor()
@@ -191,43 +192,34 @@ class DbConfigVis:
                     logger.warn("property overwritten: {}: {}".format(key, value))
                     update_statement = """UPDATE 'props_sets' SET value = ? WHERE id = ? AND key = ?"""
                     cursor.execute(update_statement, (value, new_ps_id, key))
-        finally:
             self.con.commit()
+        finally:
             cursor.close()
             return new_ps_id
 
-    def add_call_stack_and_props(self, moduleConfigFileName, current_call_stack, current_properties_set, logger):
+    def add_call_stack(self, wfid, desc, wffn, parent, psid) -> int:
         try:
             cursor = self.con.cursor()
-            # get ccs-id
-            ccs_row = self.con.execute("SELECT MAX(id) FROM call_stacks").fetchone()
-            if ccs_row[0] is None:
-                ccs_id = 1
-            else:
-                ccs_id = int(ccs_row[0]) + 1
-            # create a new ccs
-            for ilevel in range(len(current_call_stack)):
-                data = (ccs_id, ilevel+1, current_call_stack[ilevel])
-                insert_statement = """INSERT INTO 'call_stacks' ('id','ilevel','wffn') VALUES (?, ?, ?);"""
-                cursor.execute(insert_statement, data)
-
-            # properties set can be empty
-            if current_properties_set and len(current_properties_set) > 0:
-                cps_id = self.insert_props_set(current_properties_set, logger)
-            else:
-                cps_id = None
-
-            # modins_call_id
-            mic_id_row = self.con.execute("SELECT MAX(id) FROM modins_calls").fetchone()
-            if mic_id_row[0] is None:
-                mic_id = 1
-            else:
-                mic_id = int(mic_id_row[0]) + 1
-            data = (mic_id, ccs_id, moduleConfigFileName, cps_id)
+            ccs_id = self.get_max_call_stacks_id() + 1
+            # create a new call stack
+            data = (ccs_id, wfid, desc, wffn, parent, psid)
+            insert_statement = """INSERT INTO 'call_stacks' ('id','wf_id','desc','wffn','parent_id','props_set_id') VALUES (?,?,?,?,?,?);"""
+            cursor.execute(insert_statement, data)
+            self.con.commit()
+        finally:
+            cursor.close()
+            return ccs_id
+        
+        
+    def add_modins_calls(self, modfn, csid, psid):
+        try:
+            cursor = self.con.cursor()
+            mic_id = self.get_max_modins_calls_id() + 1
+            data = (mic_id, csid, modfn, psid)
             insert_statement = """INSERT INTO 'modins_calls' ('id', 'call_stack_id', 'modins', 'props_set_id') VALUES (?, ?, ?, ?);"""
             cursor.execute(insert_statement, data)
-        finally:
             self.con.commit()
+        finally:
             cursor.close()
         
     def wfs_insert(self, wf_id, wf_desc, wf_fn, cps_id):
@@ -236,23 +228,12 @@ class DbConfigVis:
             data = (wf_id, wf_desc, wf_fn, cps_id)
             insert_statement = """INSERT INTO 'wfs' ('id','description','filename', 'props_set_id') VALUES (?, ?, ?, ?);"""
             cursor.execute(insert_statement, data)
-        finally:
             self.con.commit()
+        finally:
             cursor.close()
 
-    def get_workflow_filename(self, wf_id, logger):
-        try:
-            row = self.con.execute("SELECT filename FROM wfs WHERE id =:wf_id", {"wf_id": wf_id}).fetchone()
-            if row is None:
-                # it is possible to get here for nested workflows without their own description
-                return wf_id
-            else:
-                return row[0]
-        except sqlite3.Error as error:
-            logger.error("Error get_workflow_filename: ", error)
-
     def list_wfs(self):
-        return self.con.execute("SELECT id, filename, props_set_id FROM wfs").fetchall()
+        return self.con.execute("SELECT id, wf_id, wffn, props_set_id FROM call_stacks").fetchall()
 
     def list_modins(self):
         return self.con.execute("SELECT id, modins, call_stack_id, props_set_id FROM modins_calls ORDER BY modins ASC").fetchall()
@@ -264,6 +245,7 @@ class DbConfigVis:
             return props
         except sqlite3.Error as error:
             logger.error("Error get_props_set: ", error)
+            raise
 
     def add_tts(self, tss, logger):
         try:
@@ -295,6 +277,7 @@ class DbConfigVis:
                 tss_id = row[0]
         except sqlite3.Error as error:
             logger.error("Error get_tss_id: ", error)
+            raise
         finally:
             return tss_id
 
@@ -308,6 +291,7 @@ class DbConfigVis:
             pass
         except sqlite3.Error as error:
             logger.error("Error add_endpoint: ", error)
+            raise
         finally:
             cursor.close()
 
@@ -318,10 +302,11 @@ class DbConfigVis:
             cursor.execute("DELETE FROM links")
             cursor.execute("DELETE FROM trafos")
             cursor.execute("DELETE FROM ts_sets")
+            self.con.commit()
         except sqlite3.Error as error:
             logger.error("Error clear_tables: ", error)
+            raise
         finally:
-            self.con.commit()
             cursor.close()
 
     def close(self, logger):
@@ -330,6 +315,7 @@ class DbConfigVis:
             logger.info("Db closed")
         except sqlite3.Error as error:
             logger.error("Error while closing to sqlite: ", error)
+            raise
 
     def get_links_by_tss(self, tss_id, direction, logger):
         try:
@@ -339,6 +325,7 @@ class DbConfigVis:
             return links
         except sqlite3.Error as error:
             logger.error(error)
+            raise
 
     def get_links_by_trafo(self, trafo_id, direction, logger):
         try:
@@ -348,6 +335,7 @@ class DbConfigVis:
             return links
         except sqlite3.Error as error:
             logger.error(error)
+            raise
 
     def general_query(self, query, logger):
         try:
