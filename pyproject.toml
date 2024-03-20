@@ -1,0 +1,18 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "fewsvisualiser"
+authors = [{ name = "Job Verkaik", email = "verkaik@hkv.nl" }]
+dependencies = ["fire"]
+description = "FEWSVisualiser: Insights for optimized Delft-FEWS configurations."
+readme = "README.md"
+keywords = ["delft-fews", "declarative", "configuration", "insight"]
+requires-python = ">=3.8"
+dynamic = ["version"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: BSD License"
+]
