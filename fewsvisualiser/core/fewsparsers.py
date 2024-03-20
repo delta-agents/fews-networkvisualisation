@@ -1,5 +1,5 @@
 import xml.etree.ElementTree as ET
-from Helpers import Helpers
+from fewsvisualiser.core.helpers import Helpers
 import copy
 
 
