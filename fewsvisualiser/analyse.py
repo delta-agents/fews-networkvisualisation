@@ -1,8 +1,8 @@
 import fire
 import logging
 from pathlib import Path
-from DbConfigVis import DbConfigVis
-from FewsParsers import Workflows_parser, TimeseriesSetParser, Modins_parser, Endpoint_parsers, CoefficientSet_parser
+from fewsvisualiser.core.dbconfigvis import DbConfigVis
+from fewsvisualiser.core.fewsparsers import Workflows_parser, TimeseriesSetParser, Modins_parser, Endpoint_parsers, CoefficientSet_parser
 
 
 logger = logging.getLogger(__name__)
@@ -16,7 +16,7 @@ def delete_old_database(dbpath):
 
 #=======================================================================================
 # MAIN PROGRAM
-def main(croot, dbpath):
+def analyse_config(croot, dbpath):
     logger.info(f"root: {croot}")
     config_root = Path(croot)
 
@@ -52,4 +52,4 @@ def main(croot, dbpath):
     db.close(logger)
 
 if __name__ == "__main__":
-   fire.Fire(main)
+   fire.Fire(analyse_config)

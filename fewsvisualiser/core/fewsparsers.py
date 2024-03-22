@@ -1,5 +1,5 @@
 import xml.etree.ElementTree as ET
-from Helpers import Helpers
+from fewsvisualiser.core.helpers import Helpers
 import copy
 
 
@@ -166,6 +166,93 @@ class Workflows_parser:
         for wf_filepath in workflow_folder.glob(f"**/{wf_filename}"):
             return wf_filepath
 
+    @staticmethod
+    def recurse_into_tasks(db, config_root, wf_id, cps, ccs, logger):
+        logger.info("recurse_into_tasks(wf_id -> {})".format(ccs))
+        # load wf_file into tree
+        wffn = db.get_workflow_filename(wf_id, logger)
+        wf_filepath = Workflows_parser.get_path_of_workflowfile(config_root, wffn)
+        wf_root = ET.parse(wf_filepath).getroot()
+
+        # read wff global properties and add/overwrite cps
+        cps = Workflows_parser.get_props(wf_root, cps)
+
+        # loop over activities: start recursion
+        for activity in wf_root.findall('fews:activity', ns):
+            predefinedActivity = Helpers.find_element(activity, 'fews:predefinedActivity', ns)
+            workflowId = Helpers.find_element(activity, 'fews:workflowId', ns)
+
+            if predefinedActivity:
+                logger.info(f"Skipping predefinedActivity {predefinedActivity}")
+                continue
+            elif workflowId:
+                new_ccs = copy.deepcopy(ccs)
+                new_ccs.append(workflowId)
+                new_cps = Workflows_parser.get_props(activity, cps)
+                Workflows_parser.recurse_into_tasks(db, config_root, workflowId, new_cps, new_ccs, logger)
+                del(new_ccs)
+            else:
+                # we reached the call to the module file
+                new_cps = Workflows_parser.get_props(activity, cps)
+                moduleInstanceId = Helpers.find_element(activity, 'fews:moduleInstanceId', ns)
+                moduleConfigFileName = Helpers.find_element(activity, 'fews:moduleConfigFileName', ns)
+                if not moduleConfigFileName:
+                    moduleConfigFileName = moduleInstanceId
+                # add call stack and current properties set to the database
+                logger.debug ("{} called by {} with properties {}".format(moduleConfigFileName, ccs, new_cps))
+                db.add_call_stack_and_props(moduleConfigFileName, ccs, new_cps, logger)
+
+        #logger.debug("leaving recursion")
+
+    @staticmethod
+    def parse_workflows(config_root, db, logger):
+        root = ET.parse(config_root/"RegionConfigFiles/WorkflowDescriptors.xml").getroot()
+
+        for wfd in root.findall('fews:workflowDescriptor', ns):
+            wf_id = wfd.attrib["id"]
+            try:
+                description = wfd.find('fews:description', ns).text
+            except AttributeError:
+                description = wf_id
+            try:
+                workflowFileName = wfd.find('fews:workflowFileName', ns).text
+            except AttributeError:
+                workflowFileName = wf_id
+
+            # optional properties
+            current_properties_set = {}
+            for properties in wfd.findall('fews:properties', ns):
+                [current_properties_set.update({x.attrib["key"]: x.attrib["value"]}) for x in properties if x.tag != r'{http://www.wldelft.nl/fews}description']
+            for properties in wfd.findall('fews:moduleConfigProperties', ns):
+                [current_properties_set.update({x.attrib["key"]: x.attrib["value"]}) for x in properties if x.tag != r'{http://www.wldelft.nl/fews}description']
+ 
+            # properties set can be empty
+            if len(current_properties_set) > 0:
+                cps_id = db.insert_props_set(current_properties_set, logger)
+            else:
+                cps_id = None
+
+            db.wfs_insert(wf_id, description, workflowFileName, cps_id)
+
+    @staticmethod
+    def loop_workflows(config_root, db, logger):
+        # start looping through workflowfiles
+        ncount = 0
+        for row in db.list_wfs():
+            ncount = ncount + 1
+            wf_id = row[0]
+            props_set_id = row[2]
+            # create dictionary of current properties set (cps) from wfd_props
+            if props_set_id:
+                cps = db.get_props_set(props_set_id, logger)
+            else:
+                cps = {}
+            # create array with the current call stack (ccs) from wfs
+            ccs = [wf_id]
+
+            Workflows_parser.recurse_into_tasks(db, config_root, wf_id, cps, ccs, logger)
+            # TODO: not supported yet: <sequence>, <parallel>, <completed>
+            logger.debug(f"{ncount} workflows analyzed")
 
 class Endpoint_parsers:
     @staticmethod
@@ -174,7 +261,8 @@ class Endpoint_parsers:
             cf_root = ET.parse(cf_filepath).getroot()
             if cf_root.tag == r'{http://www.wldelft.nl/fews}' + type:
                 logger.info(cf_filepath)
-                for itss in Helpers.find_element_recursive(cf_root, 'fews:timeSeriesSet', [], ns, logger):
+                for ix, itss in enumerate(Helpers.find_element_recursive(cf_root, 'fews:timeSeriesSet', [], ns, logger)):
+                    logger.debug(f"type {type}: tss no: {ix}")
                     tss = TimeseriesSetParser.parse_tss(itss, {})
                     tss_id = db.get_tss_id(tss, logger)
                     db.add_endpoint(tss_id, type, logger)

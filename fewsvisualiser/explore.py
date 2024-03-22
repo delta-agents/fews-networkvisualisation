@@ -1,7 +1,7 @@
 import fire
 import logging
 from pathlib import Path
-from DbConfigVis import DbConfigVis
+from fewsvisualiser.core.dbconfigvis import DbConfigVis
 
 
 logger = logging.getLogger(__name__)
