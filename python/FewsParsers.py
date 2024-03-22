@@ -63,7 +63,10 @@ class Workflows_parser:
 
         for wfd in root.findall('fews:workflowDescriptor', ns):
             wf_id = wfd.attrib["id"]
-            description = wfd.find('fews:description', ns).text
+            try:
+                description = wfd.find('fews:description', ns).text
+            except AttributeError:
+                description = wf_id
             try:
                 workflowFileName = wfd.find('fews:workflowFileName', ns).text
             except AttributeError:
