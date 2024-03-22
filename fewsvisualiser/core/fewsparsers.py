@@ -115,7 +115,10 @@ class Workflows_parser:
 
         for wfd in root.findall('fews:workflowDescriptor', ns):
             wf_id = wfd.attrib["id"]
-            description = wfd.find('fews:description', ns).text
+            try:
+                description = wfd.find('fews:description', ns).text
+            except AttributeError:
+                description = wf_id
             try:
                 workflowFileName = wfd.find('fews:workflowFileName', ns).text
             except AttributeError:
@@ -163,7 +166,8 @@ class Endpoint_parsers:
             cf_root = ET.parse(cf_filepath).getroot()
             if cf_root.tag == r'{http://www.wldelft.nl/fews}' + type:
                 logger.info(cf_filepath)
-                for itss in Helpers.find_element_recursive(cf_root, 'fews:timeSeriesSet', [], ns, logger):
+                for ix, itss in enumerate(Helpers.find_element_recursive(cf_root, 'fews:timeSeriesSet', [], ns, logger)):
+                    logger.debug(f"type {type}: tss no: {ix}")
                     tss = TimeseriesSetParser.parse_tss(itss, {})
                     tss_id = db.get_tss_id(tss, logger)
                     db.add_endpoint(tss_id, type, logger)
