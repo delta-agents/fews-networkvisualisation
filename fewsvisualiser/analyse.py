@@ -14,8 +14,6 @@ def delete_old_database(dbpath):
         p.unlink()
         logger.info("Existing db deleted")
 
-# TODO: overwriting properties within the samen call stack should issue a warning
-
 #=======================================================================================
 # MAIN PROGRAM
 def analyse_config(croot, dbpath):
@@ -28,11 +26,12 @@ def analyse_config(croot, dbpath):
     db.create_tables(logger)
 
     # parsing workflow descriptors
-    Workflows_parser.parse_workflows(config_root, db, logger)
+    Workflows_parser.parse_workflow_descriptors(config_root, db, logger)
     # parsing workflow files
     Workflows_parser.loop_workflows(config_root, db, logger)
 
-    db.close(logger)
+    #db.close(logger)
+    #exit(0)
     #db.clear_tables(logger)
 
     # parsing TimeSteps
