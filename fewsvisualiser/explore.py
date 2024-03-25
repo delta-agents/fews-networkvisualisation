@@ -9,9 +9,7 @@ logging.basicConfig(level=logging.INFO)
 
 #=======================================================================================
 # MAIN PROGRAM
-def main(dbpath, tss_id):
-    logger.info(f"root: {tss_id}")
-
+def main(dbpath):
     try:
         db = DbConfigVis(dbpath, logger)
 
