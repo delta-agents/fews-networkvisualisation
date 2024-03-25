@@ -1,5 +1,5 @@
 import xml.etree.ElementTree as ET
-from fewsvisualiser.core.helpers import Helpers
+from core.helpers import Helpers
 import copy
 
 
@@ -28,6 +28,13 @@ class TimeseriesSetParser:
             [timestep.update({key: value}) for key, value in ts.attrib.items()]
             timestepstring = "{}{}{}".format(timestep['multiplier'], timestep['unit'], timestep['timeZone'])
             tsid_map[timestep['id']] = timestepstring
+        
+        for ts in tsid_root.findall('fews:yearlyTimeStep', ns):
+            timestep = {'multiplier': "", 'unit': "", 'timeZone': ""}
+            [timestep.update({key: value}) for key, value in ts.attrib.items()]
+            timestepstring = "yearlyTimeStep_{}".format(timestep['id'])
+            tsid_map[timestep['id']] = timestepstring
+
 
     @staticmethod
     def parse_tss(root_tss, props):
