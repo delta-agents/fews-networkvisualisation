@@ -1,4 +1,3 @@
-import fire
 import logging
 from pathlib import Path
 from fewsvisualiser.core.dbconfigvis import DbConfigVis
@@ -9,7 +8,7 @@ logging.basicConfig(level=logging.INFO)
 
 #=======================================================================================
 # MAIN PROGRAM
-def main(dbpath):
+def explore_config(dbpath):
     try:
         db = DbConfigVis(dbpath, logger)
 
@@ -63,7 +62,3 @@ def main(dbpath):
         # for itss in upstream_tsss:
         #     i_tss = db.get_tss(itss[0], logger)
         #     logger.info(i_tss)
-   
-
-if __name__ == "__main__":
-   fire.Fire(main)
