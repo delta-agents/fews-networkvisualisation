@@ -48,10 +48,11 @@ class TimeseriesSetParser:
         qualifiers = ""
         [q_list.append(Helpers.solve_props(q.text, props)) for q in root_tss.findall('fews:qualifierId', ns)]
         for q in sorted(q_list):
-            if len(qualifiers) > 0:
-                qualifiers = qualifiers + '/' + q
-            else:
-                qualifiers = q
+            qualifiers = qualifiers + (('/' + q) if len(qualifiers) > 0 else q)
+            #if len(qualifiers) > 0:
+            #    qualifiers = qualifiers + '/' + q
+            #else:
+            #    qualifiers = q
 
         timestep = {'id': "", 'multiplier': "", 'unit': "", 'timeZone': ""}
         [timestep.update({key: Helpers.solve_props(value, props)}) for key, value in root_tss.find('fews:timeStep', ns).items()]
