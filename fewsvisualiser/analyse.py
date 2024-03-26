@@ -1,4 +1,3 @@
-import fire
 import logging
 from pathlib import Path
 from fewsvisualiser.core.dbconfigvis import DbConfigVis
@@ -6,7 +5,7 @@ from fewsvisualiser.core.fewsparsers import Workflows_parser, TimeseriesSetParse
 
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
 
 def delete_old_database(dbpath):
     p = Path(dbpath)
@@ -50,6 +49,3 @@ def analyse_config(croot, dbpath):
     Modins_parser.parse_modins(db, config_root, logger)
 
     db.close(logger)
-
-if __name__ == "__main__":
-   fire.Fire(analyse_config)
