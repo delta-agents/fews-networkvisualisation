@@ -29,11 +29,11 @@ class TimeseriesSetParser:
             timestepstring = "{}{}{}".format(timestep['multiplier'], timestep['unit'], timestep['timeZone'])
             tsid_map[timestep['id']] = timestepstring
         
-        for ts in tsid_root.findall('fews:yearlyTimeStep', ns):
-            timestep = {'multiplier': "", 'unit': "", 'timeZone': ""}
-            [timestep.update({key: value}) for key, value in ts.attrib.items()]
-            timestepstring = "yearlyTimeStep_{}".format(timestep['id'])
-            tsid_map[timestep['id']] = timestepstring
+        for ymw_ts in ("yearlyTimeStep", "monthlyTimestep", "weeklyTimestep"):
+            for ts in tsid_root.findall(f"fews:{ymw_ts}", ns):
+                ts_id = timestep.get('id')
+                timestepstring = "{}_{}".format(ymw_ts, ts_id)
+                tsid_map[ts_id] = timestepstring
 
 
     @staticmethod
@@ -49,10 +49,6 @@ class TimeseriesSetParser:
         [q_list.append(Helpers.solve_props(q.text, props)) for q in root_tss.findall('fews:qualifierId', ns)]
         for q in sorted(q_list):
             qualifiers = qualifiers + (('/' + q) if len(qualifiers) > 0 else q)
-            #if len(qualifiers) > 0:
-            #    qualifiers = qualifiers + '/' + q
-            #else:
-            #    qualifiers = q
 
         timestep = {'id': "", 'multiplier': "", 'unit': "", 'timeZone': ""}
         [timestep.update({key: Helpers.solve_props(value, props)}) for key, value in root_tss.find('fews:timeStep', ns).items()]

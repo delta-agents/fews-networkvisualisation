@@ -44,7 +44,7 @@ def analyse_config(croot, dbpath):
     # parsing scadaDisplay (schematic displays) files
     Endpoint_parsers.parse_endpoint(db, config_root / "DisplayConfigFiles", 'scadaDisplay', logger)
     # parsing transformationCoefficientSets
-    CoefficientSet_parser.parse(config_root / 'CoefficientSetsFiles', logger)
+    CoefficientSet_parser.parse(config_root / "CoefficientSetsFiles", logger)
     # parsing module instance files
     Modins_parser.parse_modins(db, config_root, logger)
 
