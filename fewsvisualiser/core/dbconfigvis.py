@@ -54,6 +54,7 @@ class DbConfigVis:
                                     qualifiers TEXT,
                                     tstype TEXT NOT NULL,
                                     timess TEXT NOT NULL,
+                                    mic_id INTEGER,
                                     CONSTRAINT PK_ts_sets PRIMARY KEY (id)
                                     )"""
         cursor.execute(dll_timeseries_sets_table)
@@ -258,7 +259,10 @@ class DbConfigVis:
 
             cursor = self.con.cursor()
             data = (tss_id, ) + tss
-            insert_statement = """INSERT INTO 'ts_sets' ('id', 'modins', 'vtype', 'parid', 'qualifiers', 'tstype', 'timess') VALUES (?, ?, ?, ?, ?, ?, ?);"""
+            if len(data) == 7:
+                insert_statement = """INSERT INTO 'ts_sets' ('id', 'modins', 'vtype', 'parid', 'qualifiers', 'tstype', 'timess') VALUES (?, ?, ?, ?, ?, ?, ?);"""
+            else:
+                insert_statement = """INSERT INTO 'ts_sets' ('id', 'modins', 'vtype', 'parid', 'qualifiers', 'tstype', 'timess', 'mic_id') VALUES (?, ?, ?, ?, ?, ?, ?, ?);"""
             cursor.execute(insert_statement, data)
             self.con.commit()
         except sqlite3.Error as error:
@@ -269,7 +273,13 @@ class DbConfigVis:
 
     def get_tss_id(self, tss, logger):
         try:
-            select_statement = "SELECT id FROM ts_sets WHERE modins = ? AND vtype = ? AND parid = ? AND qualifiers = ? AND tstype = ? AND timess = ?"
+            if tss[4] == "temporary":
+                # temporary tss's are only the same in case they are in the same mic_id
+                select_statement = "SELECT id FROM ts_sets WHERE modins = ? AND vtype = ? AND parid = ? AND qualifiers = ? AND tstype = ? AND timess = ? AND mic_id = ?"
+            else:
+                # non-temporary tss's are the same irrespective of the mic_id
+                select_statement = "SELECT id FROM ts_sets WHERE modins = ? AND vtype = ? AND parid = ? AND qualifiers = ? AND tstype = ? AND timess = ?"
+
             row = self.con.execute(select_statement, tss).fetchone()
             if row is None:
                 tss_id = self.add_tts(tss, logger)

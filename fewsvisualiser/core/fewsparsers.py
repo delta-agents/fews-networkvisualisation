@@ -6,7 +6,7 @@ import copy
 ns = {'fews': 'http://www.wldelft.nl/fews'}
 # user simple symbols
 # N.B. some of these html symbols are interpreted by python: therefore &gt; and >
-symbols_delimiters = ['+','-','/','*','^','&gt;','>','&lt;','<','&gt;=','&lt;=','=','!','(',')','||',',']
+symbols_delimiters = ['+','-','/','*','^','&gt;','>','&lt;','<','&gt;=','&lt;=','&amp;&amp;','&&','=','!','(',')','||',',']
 symbols_strings = ['isMissing','if','or','and','sin','cos','tan','asin','acos','atan','sinh','cosh', \
                    'tanh','asinh','acosh','atanh','log','ln','exp','sqrt','abs','pow','max','min', 'pi', '']
 ignored_modules = { r'{http://www.wldelft.nl/fews}reportExport', \
@@ -35,9 +35,8 @@ class TimeseriesSetParser:
                 timestepstring = "{}_{}".format(ymw_ts, ts_id)
                 tsid_map[ts_id] = timestepstring
 
-
     @staticmethod
-    def parse_tss(root_tss, props):
+    def parse_tss(root_tss, props, mic_id = ""):
         moduleInstanceId = Helpers.solve_props(root_tss.find('fews:moduleInstanceId', ns).text, props)
         valueType = Helpers.solve_props(root_tss.find('fews:valueType', ns).text, props)
         parameterId = Helpers.solve_props(root_tss.find('fews:parameterId', ns).text, props)
@@ -57,8 +56,10 @@ class TimeseriesSetParser:
         else:
             timestepstring = "{}{}{}".format(timestep['multiplier'], timestep['unit'], timestep['timeZone'])
 
-        return (moduleInstanceId, valueType, parameterId, qualifiers, timeSeriesType, timestepstring)
-
+        if timeSeriesType == "temporary":
+            return (moduleInstanceId, valueType, parameterId, qualifiers, timeSeriesType, timestepstring, mic_id)
+        else:
+            return (moduleInstanceId, valueType, parameterId, qualifiers, timeSeriesType, timestepstring)
 
 class Workflows_parser:
     @staticmethod
@@ -86,7 +87,6 @@ class Workflows_parser:
             psid = db.insert_props_set(properties_set, logger)
             csid = db.add_call_stack(wf_id, description, workflowFileName, None, psid)
             logger.debug(f"parse_workflow_descriptors: {wf_id}; cs {csid}; psid {psid} -> {properties_set}")
-
 
     @staticmethod
     def loop_workflows(config_root, db, logger):
@@ -170,7 +170,6 @@ class Workflows_parser:
         for wf_filepath in workflow_folder.glob(f"**/{wf_filename}"):
             return wf_filepath
 
-
 class Endpoint_parsers:
     @staticmethod
     def parse_endpoint(db, config_root, type, logger):
@@ -237,7 +236,7 @@ class Modins_parser:
                 variables = {}
                 for var in mi_root.findall('fews:variable', ns):
                     var_id = Helpers.solve_props(var.find('fews:variableId', ns).text, props)
-                    tss = TimeseriesSetParser.parse_tss(var.find('fews:timeSeriesSet', ns), props)
+                    tss = TimeseriesSetParser.parse_tss(var.find('fews:timeSeriesSet', ns), props, mic_id)
                     tss_id = db.get_tss_id(tss, logger)
                     variables[var_id] = tss_id
                     logger.debug(f"{var_id}: {tss}")
@@ -253,7 +252,7 @@ class Modins_parser:
                             db.add_input(mic_id, ord_nr, trafo_desc, variables[vid], logger)
                             logger.debug("input: {}".format(variables[vid]))
                         else:
-                            tss = TimeseriesSetParser.parse_tss(input.find('fews:timeSeriesSet', ns), props)
+                            tss = TimeseriesSetParser.parse_tss(input.find('fews:timeSeriesSet', ns), props, mic_id)
                             tss_id = db.get_tss_id(tss, logger)
                             db.add_input(mic_id, ord_nr, trafo_desc, tss_id, logger)
                             logger.debug("input: {}".format(tss))
@@ -265,7 +264,7 @@ class Modins_parser:
                             db.add_output(mic_id, ord_nr, trafo_desc, variables[vid], logger)
                             logger.debug("output: {}".format(variables[vid]))
                         else:
-                            tss = TimeseriesSetParser.parse_tss(output.find('fews:timeSeriesSet', ns), props)
+                            tss = TimeseriesSetParser.parse_tss(output.find('fews:timeSeriesSet', ns), props, mic_id)
                             tss_id = db.get_tss_id(tss, logger)
                             db.add_output(mic_id, ord_nr, trafo_desc, tss_id, logger)
                             logger.debug("output: {}".format(tss))
@@ -291,7 +290,7 @@ class Modins_parser:
                     local_vars = set()
                     for input in Helpers.find_element_recursive(trafo, 'fews:inputVariableDefinition', [], ns, logger):
                         vid = Helpers.solve_props(Helpers.find_element(input, 'fews:variableId', ns), props)
-                        tss = TimeseriesSetParser.parse_tss(input.find('fews:timeSeriesSet', ns), props)
+                        tss = TimeseriesSetParser.parse_tss(input.find('fews:timeSeriesSet', ns), props, mic_id)
                         tss_id = db.get_tss_id(tss, logger)
                         local_vars.add(vid)
                         # here we assume that in case a variable is defined in a trafo, it will also be used
@@ -301,7 +300,7 @@ class Modins_parser:
                     # user simple
                     for input in Helpers.find_element_recursive(trafo, 'fews:expression', [], ns, logger):
                         # solve references tss in expression, vars and trafo_vars, but skip coefficients
-                        words = Modins_parser.filter_vars_from_expression(input.text)
+                        words = Modins_parser.filter_vars_from_expression(Helpers.solve_props(input.text, props))
                         words = words.difference(coefficients)      # ignore coefficients
                         words = words.difference(local_vars)        # ignore local variables: these have already been added
                         logger.debug(words)
@@ -319,7 +318,7 @@ class Modins_parser:
                         for tsea in Helpers.find_element_recursive(exac, inputs, [], ns, logger):
                             for tsss in Helpers.find_element_recursive(tsea, 'fews:timeSeriesSets', [], ns, logger):
                                 for itss in tsss.findall('fews:timeSeriesSet', ns):
-                                    tss = TimeseriesSetParser.parse_tss(itss, props)
+                                    tss = TimeseriesSetParser.parse_tss(itss, props, mic_id)
                                     tss_id = db.get_tss_id(tss, logger)
                                     ord_nr = ord_nr + 1
                                     db.add_input(mic_id, ord_nr, modins_fn, tss_id, logger)
@@ -328,7 +327,7 @@ class Modins_parser:
                         for tsia in Helpers.find_element_recursive(imac, outputs, [], ns, logger):
                             for tsss in Helpers.find_element_recursive(tsia, 'fews:timeSeriesSets', [], ns, logger):
                                 for itss in tsss.findall('fews:timeSeriesSet', ns):
-                                    tss = TimeseriesSetParser.parse_tss(itss, props)
+                                    tss = TimeseriesSetParser.parse_tss(itss, props, mic_id)
                                     tss_id = db.get_tss_id(tss, logger)
                                     ord_nr = ord_nr + 1
                                     db.add_output(mic_id, ord_nr, modins_fn, tss_id, logger)
@@ -337,7 +336,7 @@ class Modins_parser:
                 logger.debug(mi_root.tag)
                 ord_nr = 0
                 for tsss in Helpers.find_element_recursive(mi_root, 'fews:timeSeriesSet', [], ns, logger):
-                    tss = TimeseriesSetParser.parse_tss(itss, props)
+                    tss = TimeseriesSetParser.parse_tss(itss, props, mic_id)
                     tss_id = db.get_tss_id(tss, logger)
                     ord_nr = ord_nr + 1
                     db.add_output(mic_id, ord_nr, modins_fn, tss_id, logger)
@@ -347,7 +346,7 @@ class Modins_parser:
                 logger.debug(mi_root.tag)
                 ord_nr = 0
                 for tsss in Helpers.find_element_recursive(mi_root, 'fews:timeSeriesSet', [], ns, logger):
-                    tss = TimeseriesSetParser.parse_tss(itss, props)
+                    tss = TimeseriesSetParser.parse_tss(itss, props, mic_id)
                     tss_id = db.get_tss_id(tss, logger)
                     ord_nr = ord_nr + 1
                     db.add_input(mic_id, ord_nr, modins_fn, tss_id, logger)
