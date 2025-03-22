@@ -3,3 +3,8 @@ __pycache__
 aantekeningen.doc
 test*.ipynb
 /.vscode/launch.json
+/config
+.DS_Store
+db/*.log
+notebooks/*
+!notebooks/*.py
