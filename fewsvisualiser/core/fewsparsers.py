@@ -8,7 +8,7 @@ ns = {'fews': 'http://www.wldelft.nl/fews'}
 # N.B. some of these html symbols are interpreted by python: therefore &gt; and >
 symbols_delimiters = ['+','-','/','*','^','&gt;','>','&lt;','<','&gt;=','&lt;=','&amp;&amp;','&&','=','!','(',')','||',',']
 symbols_strings = ['isMissing','if','or','and','sin','cos','tan','asin','acos','atan','sinh','cosh', \
-                   'tanh','asinh','acosh','atanh','log','ln','exp','sqrt','abs','pow','max','min', 'pi', '']
+                   'tanh','asinh','acosh','atanh','log','ln','exp','sqrt','abs','pow','max','min', 'pi', 'NaN', '"NaN"', '']
 ignored_modules = { r'{http://www.wldelft.nl/fews}reportExport', \
                     r'{http://www.wldelft.nl/fews}secondaryValidation', \
                     r'{http://www.wldelft.nl/fews}importAmalgamate',  \
@@ -37,20 +37,56 @@ class TimeseriesSetParser:
 
     @staticmethod
     def parse_tss(root_tss, props, mic_id = ""):
-        moduleInstanceId = Helpers.solve_props(root_tss.find('fews:moduleInstanceId', ns).text, props)
-        valueType = Helpers.solve_props(root_tss.find('fews:valueType', ns).text, props)
-        parameterId = Helpers.solve_props(root_tss.find('fews:parameterId', ns).text, props)
-        timeSeriesType = Helpers.solve_props(root_tss.find('fews:timeSeriesType', ns).text, props)
+        """Parse a timeseries set XML element.
+        
+        Args:
+            root_tss: The XML element containing the timeSeriesSet
+            props: Properties dictionary for variable substitution
+            mic_id: Optional module instance call ID
+            
+        Returns:
+            A tuple containing timeseries set information
+            
+        Raises:
+            ValueError: If required elements are missing from the XML
+        """
+        if root_tss is None:
+            raise ValueError("Cannot parse timeSeriesSet: XML element is None")
+            
+        # Find and validate required elements
+        mod_ins_elem = root_tss.find('fews:moduleInstanceId', ns)
+        if mod_ins_elem is None or mod_ins_elem.text is None:
+            raise ValueError("Missing moduleInstanceId in timeSeriesSet")
+        moduleInstanceId = Helpers.solve_props(mod_ins_elem.text, props)
+        
+        val_type_elem = root_tss.find('fews:valueType', ns)
+        if val_type_elem is None or val_type_elem.text is None:
+            raise ValueError("Missing valueType in timeSeriesSet")
+        valueType = Helpers.solve_props(val_type_elem.text, props)
+        
+        param_id_elem = root_tss.find('fews:parameterId', ns)
+        if param_id_elem is None or param_id_elem.text is None:
+            raise ValueError("Missing parameterId in timeSeriesSet")
+        parameterId = Helpers.solve_props(param_id_elem.text, props)
+        
+        ts_type_elem = root_tss.find('fews:timeSeriesType', ns)
+        if ts_type_elem is None or ts_type_elem.text is None:
+            raise ValueError("Missing timeSeriesType in timeSeriesSet")
+        timeSeriesType = Helpers.solve_props(ts_type_elem.text, props)
 
         # multiple qualifiers are possible
         q_list = []
         qualifiers = ""
-        [q_list.append(Helpers.solve_props(q.text, props)) for q in root_tss.findall('fews:qualifierId', ns)]
+        [q_list.append(Helpers.solve_props(q.text, props)) for q in root_tss.findall('fews:qualifierId', ns) if q.text is not None]
         for q in sorted(q_list):
             qualifiers = qualifiers + (('/' + q) if len(qualifiers) > 0 else q)
 
+        timestep_elem = root_tss.find('fews:timeStep', ns)
+        if timestep_elem is None:
+            raise ValueError("Missing timeStep in timeSeriesSet")
+            
         timestep = {'id': "", 'multiplier': "", 'unit': "", 'timeZone': ""}
-        [timestep.update({key: Helpers.solve_props(value, props)}) for key, value in root_tss.find('fews:timeStep', ns).items()]
+        [timestep.update({key: Helpers.solve_props(value, props)}) for key, value in timestep_elem.items()]
         if timestep.get('id'):
             timestepstring = tsid_map[timestep['id']]
         else:
@@ -252,7 +288,12 @@ class Modins_parser:
                             db.add_input(mic_id, ord_nr, trafo_desc, variables[vid], logger)
                             logger.debug("input: {}".format(variables[vid]))
                         else:
-                            tss = TimeseriesSetParser.parse_tss(input.find('fews:timeSeriesSet', ns), props, mic_id)
+                            tss_elem = input.find('fews:timeSeriesSet', ns)
+                            if tss_elem is None:
+                                logger.error(f"Critical error: Missing required timeSeriesSet in inputVariable for transformation {trafo_desc}")
+                                continue
+                            
+                            tss = TimeseriesSetParser.parse_tss(tss_elem, props, mic_id)
                             tss_id = db.get_tss_id(tss, logger)
                             db.add_input(mic_id, ord_nr, trafo_desc, tss_id, logger)
                             logger.debug("input: {}".format(tss))
@@ -264,7 +305,12 @@ class Modins_parser:
                             db.add_output(mic_id, ord_nr, trafo_desc, variables[vid], logger)
                             logger.debug("output: {}".format(variables[vid]))
                         else:
-                            tss = TimeseriesSetParser.parse_tss(output.find('fews:timeSeriesSet', ns), props, mic_id)
+                            tss_elem = output.find('fews:timeSeriesSet', ns)
+                            if tss_elem is None:
+                                logger.error(f"Critical error: Missing required timeSeriesSet in outputVariable for transformation {trafo_desc}")
+                                continue
+                            
+                            tss = TimeseriesSetParser.parse_tss(tss_elem, props, mic_id)
                             tss_id = db.get_tss_id(tss, logger)
                             db.add_output(mic_id, ord_nr, trafo_desc, tss_id, logger)
                             logger.debug("output: {}".format(tss))
@@ -290,7 +336,12 @@ class Modins_parser:
                     local_vars = set()
                     for input in Helpers.find_element_recursive(trafo, 'fews:inputVariableDefinition', [], ns, logger):
                         vid = Helpers.solve_props(Helpers.find_element(input, 'fews:variableId', ns), props)
-                        tss = TimeseriesSetParser.parse_tss(input.find('fews:timeSeriesSet', ns), props, mic_id)
+                        tss_elem = input.find('fews:timeSeriesSet', ns)
+                        if tss_elem is None:
+                            logger.error(f"Critical error: Missing required timeSeriesSet in inputVariableDefinition for transformation {trafo_desc}")
+                            continue
+                        
+                        tss = TimeseriesSetParser.parse_tss(tss_elem, props, mic_id)
                         tss_id = db.get_tss_id(tss, logger)
                         local_vars.add(vid)
                         # here we assume that in case a variable is defined in a trafo, it will also be used
@@ -305,7 +356,11 @@ class Modins_parser:
                         words = words.difference(local_vars)        # ignore local variables: these have already been added
                         logger.debug(words)
                         # the remaining words should be variables at module level
-                        [db.add_input(mic_id, ord_nr, trafo_desc, variables[w], logger) for w in words]
+                        for w in words:
+                            if w in variables:
+                                db.add_input(mic_id, ord_nr, trafo_desc, variables[w], logger)
+                            else:
+                                logger.warning(f"Variable '{w}' not found in variables dictionary for transformation '{trafo_desc}'")
 
             # GENERAL ADAPTER
             elif mi_root.tag == r'{http://www.wldelft.nl/fews}generalAdapterRun':
@@ -336,7 +391,7 @@ class Modins_parser:
                 logger.debug(mi_root.tag)
                 ord_nr = 0
                 for tsss in Helpers.find_element_recursive(mi_root, 'fews:timeSeriesSet', [], ns, logger):
-                    tss = TimeseriesSetParser.parse_tss(itss, props, mic_id)
+                    tss = TimeseriesSetParser.parse_tss(tsss, props, mic_id)
                     tss_id = db.get_tss_id(tss, logger)
                     ord_nr = ord_nr + 1
                     db.add_output(mic_id, ord_nr, modins_fn, tss_id, logger)
@@ -346,7 +401,7 @@ class Modins_parser:
                 logger.debug(mi_root.tag)
                 ord_nr = 0
                 for tsss in Helpers.find_element_recursive(mi_root, 'fews:timeSeriesSet', [], ns, logger):
-                    tss = TimeseriesSetParser.parse_tss(itss, props, mic_id)
+                    tss = TimeseriesSetParser.parse_tss(tsss, props, mic_id)
                     tss_id = db.get_tss_id(tss, logger)
                     ord_nr = ord_nr + 1
                     db.add_input(mic_id, ord_nr, modins_fn, tss_id, logger)
