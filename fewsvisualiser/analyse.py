@@ -2,24 +2,31 @@ import logging
 from pathlib import Path
 from fewsvisualiser.core.dbconfigvis import DbConfigVis
 from fewsvisualiser.core.fewsparsers import Workflows_parser, TimeseriesSetParser, Modins_parser, Endpoint_parsers, CoefficientSet_parser
+from fewsvisualiser.core.helpers import setup_logging, delete_file
 
-
-logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.DEBUG)
-
-def delete_old_database(dbpath):
-    p = Path(dbpath)
-    if p.exists():
-        p.unlink()
-        logger.info("Existing db deleted")
 
 #=======================================================================================
 # MAIN PROGRAM
 def analyse_config(croot, dbpath):
+    # Convert to Path objects
+    dbpath_obj = Path(dbpath)
+    
+    # Extract the database name for the log file
+    db_name = dbpath_obj.stem
+    log_file = dbpath_obj.parent / f"{db_name}.log"
+    
+    # Ensure we start with clean files
+    delete_file(log_file)  # Clean log file
+    delete_file(dbpath)    # Clean database file
+    
+    # Setup logging
+    global logger
+    logger = setup_logging(__name__, str(log_file))
+    
     logger.info(f"root: {croot}")
+    logger.info(f"Log file: {log_file}")
+    logger.info(f"Starting with clean database: {dbpath}")
     config_root = Path(croot)
-
-    delete_old_database(dbpath)
 
     db = DbConfigVis(dbpath, logger)
     db.create_tables(logger)
