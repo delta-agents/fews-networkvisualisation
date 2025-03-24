@@ -8,3 +8,5 @@ test*.ipynb
 db/*.log
 notebooks/*
 !notebooks/*.py
+!notebooks/talkwithfews.ipynb
+env/.env
