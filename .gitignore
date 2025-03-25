@@ -10,3 +10,4 @@ notebooks/*
 !notebooks/*.py
 !notebooks/talkwithfews.ipynb
 env/.env
+logs/fews_agent.log
