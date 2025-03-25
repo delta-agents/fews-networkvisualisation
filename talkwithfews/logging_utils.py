@@ -17,6 +17,37 @@ logger = logging.getLogger("fews_agent")
 # Type variable for the decorator
 F = TypeVar('F', bound=Callable[..., Any])
 
+def format_sql_query(query):
+    """Format a SQL query with proper indentation."""
+    # Clean up the query
+    query = query.strip()
+    query = " ".join(query.split())
+    
+    # Format with proper indentation
+    formatted = query.replace("SELECT", "\nSELECT")
+    formatted = formatted.replace("FROM", "\nFROM")
+    formatted = formatted.replace("WHERE", "\nWHERE")
+    formatted = formatted.replace("JOIN", "\nJOIN")
+    formatted = formatted.replace("AND", "\nAND")
+    formatted = formatted.replace("ORDER BY", "\nORDER BY")
+    formatted = formatted.replace("GROUP BY", "\nGROUP BY")
+    
+    # Format IN clauses with long lists of values
+    if "IN (" in formatted:
+        parts = formatted.split("IN (")
+        if len(parts) > 1:
+            values_part = parts[1].split(")", 1)
+            if len(values_part) > 1:
+                values = [v.strip() for v in values_part[0].split(",")]
+                if len(values) > 5:
+                    chunks = [values[i:i+5] for i in range(0, len(values), 5)]
+                    formatted_values = ",\n    ".join(", ".join(chunk) for chunk in chunks)
+                    formatted = parts[0] + "IN (\n    " + formatted_values + "\n)" + values_part[1]
+    
+    # Format comments
+    formatted = formatted.replace("--", "\n--")
+    return formatted
+
 def format_input_for_logging(input_data):
     """Format input data for logging in a readable way."""
     try:
@@ -40,39 +71,39 @@ def log_tool_call(func: F) -> F:
         tool_name = getattr(func, "__name__", str(func))
         input_data = args[0] if args else kwargs
         
-        # Log the call with input details
-        formatted_input = format_input_for_logging(input_data)
+        # Log the call
         logger.info(f"Calling tool: {tool_name}")
-        logger.info(f"Tool input: {formatted_input}")
         
-        # Check if reasoning was provided
-        if hasattr(ctx.deps, 'tracker') and ctx.deps.tracker is not None:
-            reasoning = getattr(ctx.deps.tracker, 'current_reasoning', None)
-            if reasoning:
-                logger.info(f"Reasoning: {reasoning}")
+        # Format and log the input
+        if isinstance(input_data, dict) and "query" in input_data:
+            # For SQL queries in dict format
+            query = input_data["query"]
+            formatted_query = format_sql_query(query)
+            logger.info(formatted_query)
+        elif hasattr(input_data, "query"):
+            # For SQLQueryInput objects
+            query = input_data.query
+            formatted_query = format_sql_query(query)
+            logger.info(formatted_query)
+        elif isinstance(input_data, dict) and "input" in input_data and not input_data["input"]:
+            # Skip logging empty input dicts
+            pass
+        elif isinstance(input_data, dict):
+            # Format other dict inputs
+            formatted_input = format_input_for_logging(input_data)
+            logger.info(formatted_input)
+        else:
+            # Format non-dict inputs
+            logger.info(str(input_data))
         
         try:
             # Execute the tool
             result = await func(ctx, *args, **kwargs)
-            
-            # Log successful result
             logger.info(f"Tool {tool_name} completed successfully")
-            
-            # Track the call if tracker is available in deps
-            if hasattr(ctx.deps, 'tracker') and ctx.deps.tracker is not None:
-                ctx.deps.tracker.log_call(tool_name, input_data, result)
-                
             return result
             
         except Exception as e:
-            # Log error
             logger.error(f"Tool {tool_name} failed: {str(e)}")
-            
-            # Track the error
-            if hasattr(ctx.deps, 'tracker') and ctx.deps.tracker is not None:
-                ctx.deps.tracker.log_call(tool_name, input_data, None, str(e))
-                
-            # Re-raise the exception
             raise
             
     return cast(F, wrapper)
@@ -89,10 +120,7 @@ def setup_logging(log_level="INFO", log_dir=None):
         log_path = Path(log_dir)
         log_path.mkdir(parents=True, exist_ok=True)
         
-        # Create timestamped log file
-        #from datetime import datetime
-        #timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        #log_file = log_path / f"fews_agent_{timestamp}.log"
+        # Create log file
         log_file = log_path / f"fews_agent.log"
         
         # Clear the log file if it already exists
@@ -101,8 +129,8 @@ def setup_logging(log_level="INFO", log_dir=None):
             with open(log_file, 'w') as f:
                 f.truncate(0)
         
-        # Configure file handler
-        file_handler = logging.FileHandler(log_file)
+        # Configure file handler with basic formatter
+        file_handler = logging.FileHandler(log_file, mode='a', encoding='utf-8')
         file_handler.setLevel(numeric_level)
         formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
         file_handler.setFormatter(formatter)
