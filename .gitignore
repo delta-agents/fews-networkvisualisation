@@ -9,4 +9,6 @@ db/*.log
 notebooks/*
 !notebooks/*.py
 !notebooks/talkwithfews.ipynb
+!notebooks/validate_tools.ipynb
 env/.env
+logs/fews_agent.log
