@@ -239,10 +239,16 @@ class FEWSConfigAgent:
             # Use basic run method
             response = await self.agent.run(question, deps=self.deps)
             
-            # Convert response to string if needed
+            # Properly extract the content based on the response type
             if hasattr(response, 'content'):
                 return response.content
-            return str(response)
+            elif hasattr(response, 'data'):
+                return response.data
+            elif isinstance(response, dict) and 'data' in response:
+                return response['data']
+            else:
+                # Fall back to string conversion if we can't extract content otherwise
+                return str(response)
                         
         except Exception as e:
             logger.error(f"Error asking agent: {str(e)}")
