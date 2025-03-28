@@ -4,8 +4,9 @@ Pydantic models for the FEWS Configuration Agent.
 This module defines the models used by the agent to query and analyze FEWS configurations.
 """
 
-from typing import List, Dict, Any, Optional
-from pydantic import BaseModel, Field
+from typing import List, Dict, Any, Optional, Literal
+from pydantic import BaseModel, Field, validator
+from enum import Enum
 import sqlite3
 
 # Define ToolCallTracker directly here to avoid circular imports
@@ -15,16 +16,16 @@ class ToolCallTracker:
     def __init__(self):
         """Initialize a new tracker."""
         self.calls = []
-        self.current_reasoning = None
+        self.reasoning = None
     
     def clear(self):
         """Clear all tracked calls."""
         self.calls = []
-        self.current_reasoning = None
+        self.reasoning = None
     
     def set_reasoning(self, reasoning):
         """Set the reasoning for the next tool call."""
-        self.current_reasoning = reasoning
+        self.reasoning = reasoning
     
     def log_call(self, tool_name, input_data, output_data=None, error=None):
         """Log a tool call with its input, output, and any errors."""
@@ -34,10 +35,10 @@ class ToolCallTracker:
             "output": output_data,
             "error": error,
             "success": error is None,
-            "reasoning": self.current_reasoning
+            "reasoning": self.reasoning
         })
         # Reset reasoning after logging
-        self.current_reasoning = None
+        self.reasoning = None
     
     def get_summary(self):
         """Get a summary of tool calls."""
@@ -59,30 +60,16 @@ class ToolCallTracker:
         }
 
 
-class Deps:
-    """
-    Dependencies for the FEWS Configuration Agent.
-    
-    Attributes:
-        db_connection: SQLite database connection
-        db_path: Path to the SQLite database
-        schema: Comprehensive database schema information
-        tracker: Tool call tracker
-    """
-    def __init__(self, db_path: str = None, db_connection: sqlite3.Connection = None, tracker: ToolCallTracker = None):
-        self.db_path = db_path
-        self.db_connection = db_connection
-        self.schema: Optional[Dict[str, Any]] = None
-        self.tracker = tracker
+class Deps(BaseModel):
+    """Dependencies for the FEWS Configuration Agent."""
+    db_path: str
+    db_connection: Any
+    tracker: Any
+    db_schema: Optional[Dict[str, Any]] = None
 
 
 class SQLQueryInput(BaseModel):
-    """
-    Input for SQL query.
-    
-    Attributes:
-        query: SQL query to execute
-    """
+    """Input for SQL query execution."""
     query: str = Field(..., description="SQL query to execute")
 
 
@@ -148,15 +135,63 @@ class DependencyAnalysisInput(BaseModel):
     entity_id: int = Field(..., description="ID of the entity to analyze")
 
 
+class EntityType(str, Enum):
+    """Valid entity types for visualization."""
+    TIMESERIES = "timeseries"
+    TRANSFORMATION = "transformation"
+    WORKFLOW = "workflow"
+
+
 class VisualizationRequestInput(BaseModel):
-    """
-    Input for visualization request.
-    
-    Attributes:
-        entity_type: Type of entity to visualize (timeseries, transformation, workflow)
-        entity_id: ID of the entity to visualize
-        depth: Maximum depth for hierarchical visualizations
-    """
-    entity_type: str = Field(..., description="Type of entity to visualize (timeseries, transformation, workflow)")
+    """Input for visualization requests."""
+    entity_type: EntityType = Field(..., description="Type of entity to visualize")
     entity_id: int = Field(..., description="ID of the entity to visualize")
-    depth: int = Field(3, description="Maximum depth for hierarchical visualizations") 
+    depth: Optional[int] = Field(default=5, description="Maximum depth for recursive queries")
+
+
+class EndpointPathRequest(BaseModel):
+    """
+    Input specifically for endpoint to root path requests.
+    This model enforces that we only work with timeseries entities.
+    """
+    entity_id: int = Field(..., description="ID of the timeseries set to trace")
+    depth: Optional[int] = Field(default=5, description="Maximum depth for recursive queries")
+    
+    @property
+    def entity_type(self) -> Literal["timeseries"]:
+        """Always returns 'timeseries' as this is specific to timeseries endpoints."""
+        return "timeseries"
+
+
+class PathData(BaseModel):
+    """Data structure for a path from endpoint to root."""
+    type: str = Field("path_data", description="Type of data")
+    data: List[Dict[str, Any]] = Field(..., description="List of path components")
+
+
+class PathFlowOutput(BaseModel):
+    """Output for path flow visualization."""
+    type: str = Field("streamlit_flow", description="Type of visualization")
+    state: Any = Field(..., description="Streamlit flow state")
+
+
+class PathTableOutput(BaseModel):
+    """Output for path table visualization."""
+    type: str = Field("table", description="Type of visualization")
+    data: Any = Field(..., description="Table data")
+
+
+class RenderPathInput(BaseModel):
+    """Input for rendering a path as a flow diagram."""
+    path_data: PathData = Field(..., description="Path data to render as a flow diagram")
+
+
+class RenderPathTableInput(BaseModel):
+    """Input for rendering a path as a table."""
+    path_data: PathData = Field(..., description="Path data to render as a table")
+
+
+class FlowState(BaseModel):
+    """State for streamlit-flow visualization."""
+    type: str = Field("streamlit_flow", description="Type of visualization")
+    state: Dict[str, Any] = Field(..., description="Streamlit flow state containing nodes and edges") 

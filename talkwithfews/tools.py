@@ -60,8 +60,8 @@ async def execute_query(ctx: RunContext[Deps], input: SQLQueryInput) -> SQLQuery
         logger.error(f"SQL Error: {error_msg} - Query: {input.query}")
         
         # Attempt to diagnose common errors using schema_utils.diagnose_sql_error
-        if hasattr(ctx.deps, 'schema') and ctx.deps.schema:
-            schema_info = create_schema_info_dict(ctx.deps.schema)
+        if hasattr(ctx.deps, 'db_schema') and ctx.deps.db_schema:
+            schema_info = create_schema_info_dict(ctx.deps.db_schema)
             error_diagnosis = diagnose_sql_error(str(e), input.query, schema_info)
             if error_diagnosis:
                 error_msg += f" - {error_diagnosis}"
@@ -393,9 +393,9 @@ async def get_database_schema(ctx: RunContext[Deps], input: dict = None) -> Dict
     """
     try:
         # If we already have schema info, use it
-        if hasattr(ctx.deps, 'schema') and ctx.deps.schema:
+        if hasattr(ctx.deps, 'db_schema') and ctx.deps.db_schema:
             logger.info("Using cached schema information")
-            schema = ctx.deps.schema
+            schema = ctx.deps.db_schema
             
             # Return simplified view of schema for tool response
             return {
@@ -414,7 +414,7 @@ async def get_database_schema(ctx: RunContext[Deps], input: dict = None) -> Dict
         schema = extract_llm_friendly_schema(db_path)
         
         # Cache schema for future use
-        ctx.deps.schema = schema
+        ctx.deps.db_schema = schema
         
         # Return formatted schema information
         return {

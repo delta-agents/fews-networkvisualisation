@@ -9,10 +9,14 @@ import json
 from pydantic_ai import Agent, Tool
 from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.providers.openai import OpenAIProvider
+from typing import Union, Dict, Any
+from pydantic import BaseModel, Field
 
 from .models import (
     Deps,
-    ToolCallTracker
+    ToolCallTracker,
+    RenderPathInput,
+    FlowState
 )
 
 # Import logging utilities from the dedicated module
@@ -37,12 +41,24 @@ from .tools import (
 from .visualization import (
     generate_network_visualization,
     generate_call_hierarchy_visualization,
-    generate_data_flow_visualization
+    generate_data_flow_visualization,
+    get_endpoint_to_root_path,
+    render_path_as_flow,
+    render_path_as_table
 )
 
 from .utils import connect_to_database, format_results_as_table, generate_mermaid_diagram
 
 from .schema_utils import extract_llm_friendly_schema, generate_llm_context, create_schema_info_dict, get_table_relationships
+
+class FlowState(BaseModel):
+    """State for streamlit-flow visualization."""
+    type: str = "streamlit_flow"
+    state: Dict[str, Any] = Field(..., description="Streamlit flow state containing nodes and edges")
+
+class AgentResponse(BaseModel):
+    type: str
+    state: Dict[str, Any]
 
 # Create a global tracker instance for the decorator to use
 tracker = ToolCallTracker()
@@ -153,7 +169,7 @@ class FEWSConfigAgent:
         llm_context = generate_llm_context(schema)
         
         # Set schema in deps for tools to access
-        deps.schema = schema
+        deps.db_schema = schema
         
         # Create a comprehensive system prompt with the schema information
         system_prompt = (
@@ -163,29 +179,20 @@ class FEWSConfigAgent:
             f"{llm_context}\n\n"
             "FORMAT YOUR RESPONSES IN A STRUCTURED WAY:\n"
             "1. Present query results in tables whenever possible\n"
-            "2. Use diagrams to show relationships and data flows\n"
+            "2. Use streamlit-flow diagrams to show relationships and data flows\n"
             "3. Provide key metrics and counts at the beginning of responses\n"
             "4. Structure insights with headers and bullet points\n\n"
-            "Avoid conversational language. Be direct and technical. Users are experts looking for insights, not conversation.\n\n"
-            "Always use the available tools to query the database and explore the configuration thoroughly before answering.\n\n"
-            "IMPORTANT: For each tool you use, provide a brief reasoning about why you're using it, starting with 'Reasoning: '."
+            "IMPORTANT RULES:\n"
+            "1. When using get_endpoint_to_root_path, ALWAYS follow it with render_path_as_flow to visualize the path\n"
+            "2. NEVER generate Mermaid diagrams. Always use render_path_as_flow for visualizations\n"
+            "3. When using render_path_as_flow, return ONLY the flow state. Do not generate any text response.\n"
+            "4. For each tool you use, provide a brief reasoning about why you're using it, starting with 'Reasoning: '\n"
+            "5. Avoid conversational language. Be direct and technical. Users are experts looking for insights, not conversation.\n"
+            "6. When using render_path_as_flow, do not add any text response or explanation. Just return the flow state.\n\n"
+            "Always use the available tools to query the database and explore the configuration thoroughly before answering."
         )
             
         logger.info("Using comprehensive schema from schema_utils")
-        
-        # Callback to capture reasoning
-        def reasoning_callback(tool_name, **kwargs):
-            if 'name' in kwargs and 'thoughts' in kwargs:
-                # Get reasoning from thoughts
-                thoughts = kwargs.get('thoughts', '')
-                if thoughts and hasattr(tracker, 'set_reasoning'):
-                    # Look for reasoning in thoughts
-                    reasoning_lines = [line for line in thoughts.split('\n') 
-                                     if line.startswith('Reasoning:')]
-                    if reasoning_lines:
-                        reasoning = reasoning_lines[0].replace('Reasoning:', '').strip()
-                        tracker.set_reasoning(reasoning)
-                        logger.info(f"Agent reasoning for {tool_name}: {reasoning}")
         
         # Set up the tools
         tools = [
@@ -204,7 +211,10 @@ class FEWSConfigAgent:
             Tool(analyze_dead_points, takes_ctx=True, name="analyze_dead_points", description="Identify time series sets that are neither used as inputs nor marked as endpoints ('dead points')"),
             Tool(generate_network_visualization, takes_ctx=True, name="generate_network_visualization", description="Generate a network visualization of entities and their relationships"),
             Tool(generate_call_hierarchy_visualization, takes_ctx=True, name="generate_call_hierarchy_visualization", description="Generate a visualization of workflow call hierarchy"),
-            Tool(generate_data_flow_visualization, takes_ctx=True, name="generate_data_flow_visualization", description="Generate a visualization of data flow through transformations")
+            Tool(generate_data_flow_visualization, takes_ctx=True, name="generate_data_flow_visualization", description="Generate a visualization of data flow through transformations"),
+            Tool(get_endpoint_to_root_path, takes_ctx=True, name="get_endpoint_to_root_path", description="Get the complete path from an endpoint timeseries to its root"),
+            Tool(render_path_as_flow, takes_ctx=True, name="render_path_as_flow", description="Render a path as a streamlit-flow diagram"),
+            Tool(render_path_as_table, takes_ctx=True, name="render_path_as_table", description="Render a path as a table")
         ]
         
         # Create the model with OpenRouter configuration
@@ -228,7 +238,7 @@ class FEWSConfigAgent:
             )
         )
         
-        # Create the agent
+        # Create the agent with specific result type
         logger.info(f"Creating FEWS Configuration Agent using {self.model_name}")
         if base_url:
             logger.info(f"Using custom base URL: {base_url}")
@@ -237,7 +247,8 @@ class FEWSConfigAgent:
             model=model,
             tools=tools,
             system_prompt=system_prompt,
-            deps_type=Deps
+            deps_type=Deps#,
+            #result_type=FlowState  # Use FlowState as the single result type
         )
         
         # Store deps for later use when calling the agent
@@ -273,7 +284,15 @@ class FEWSConfigAgent:
                 if tool_summary:
                     logger.info(f"Tool usage summary: {json.dumps(tool_summary, indent=2)}")
             
-            return response.data
+            # Handle response - now we know it's always a FlowState
+            if isinstance(response.data, FlowState):
+                return {
+                    "type": "streamlit_flow",
+                    "state": response.data.state
+                }
+            else:
+                return str(response.data)
+                
         except Exception as e:
             logger.error(f"Error asking agent: {str(e)}")
             raise

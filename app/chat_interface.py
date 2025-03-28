@@ -7,6 +7,9 @@ from talkwithfews.agent import FEWSConfigAgent
 import threading
 from queue import Queue, Empty
 import time
+from streamlit_flow import streamlit_flow
+from streamlit_flow.state import StreamlitFlowState
+from uuid import uuid4
 
 class AgentManager:
     def __init__(self, config):
@@ -95,9 +98,14 @@ class AgentManager:
             while time.time() - start_time < 300:  # 5 minutes timeout
                 try:
                     response = self.response_queue.get(timeout=1)
-                    if response.startswith("Fout:"):
-                        raise Exception(response)
-                    return response
+                    if isinstance(response, dict):
+                        return response
+                    elif isinstance(response, str):
+                        if response.startswith("Fout:"):
+                            raise Exception(response)
+                        return response
+                    else:
+                        return str(response)
                 except Empty:
                     if not self.processing:
                         if self.error:
@@ -120,6 +128,34 @@ class AgentManager:
         self.ready.clear()
         self.processing = False
         self.error = None
+
+    def process_agent(self):
+        """Process agent responses in a separate thread."""
+        while True:
+            try:
+                command = self.command_queue.get()
+                if command is None:
+                    break
+                    
+                self.processing = True
+                self.error = None
+                
+                try:
+                    response = asyncio.run(self.agent.ask(command))
+                    if isinstance(response, dict):
+                        self.response_queue.put(response)
+                    else:
+                        self.response_queue.put(str(response))
+                except Exception as e:
+                    self.error = str(e)
+                    self.response_queue.put(f"Fout: {str(e)}")
+                finally:
+                    self.processing = False
+                    
+            except Exception as e:
+                self.error = str(e)
+                self.response_queue.put(f"Fout: {str(e)}")
+                self.processing = False
 
 def initialize_chat_history():
     """Initialize chat history in session state."""
@@ -144,12 +180,38 @@ def render_chat_interface(config):
     # Display chat messages
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+            content = message["content"]
+            if isinstance(content, dict):
+                # Handle special content types
+                if content.get("type") == "streamlit_flow":
+                    # Initialize flow state if not exists
+                    flow_key = f"flow_{message['id']}"
+                    if flow_key not in st.session_state:
+                        st.session_state[flow_key] = content["state"]
+                    
+                    # Render the flow diagram
+                    st.session_state[flow_key] = streamlit_flow(
+                        flow_key,
+                        st.session_state[flow_key]
+                    )
+                elif content.get("type") == "table":
+                    st.table(content["data"])
+                else:
+                    st.markdown(content.get("text", ""))
+            else:
+                st.markdown(content)
     
     # Chat input
     if prompt := st.chat_input("Stel een vraag over je FEWS configuratie..."):
+        # Generate unique message ID
+        message_id = str(uuid4())
+        
         # Add user message to chat history
-        st.session_state.messages.append({"role": "user", "content": prompt})
+        st.session_state.messages.append({
+            "id": message_id,
+            "role": "user",
+            "content": prompt
+        })
         with st.chat_message("user"):
             st.markdown(prompt)
         
@@ -158,12 +220,52 @@ def render_chat_interface(config):
             with st.spinner("Denken..."):
                 try:
                     response = st.session_state.agent_manager.ask(prompt)
-                    st.markdown(response)
-                    st.session_state.messages.append({"role": "assistant", "content": response})
+                    
+                    # Handle different response types
+                    if isinstance(response, dict):
+                        if response.get("type") == "streamlit_flow":
+                            # Store flow state in session
+                            flow_key = f"flow_{message_id}"
+                            if flow_key not in st.session_state:
+                                st.session_state[flow_key] = response["state"]
+                            
+                            # Add to chat history with special content type
+                            st.session_state.messages.append({
+                                "id": message_id,
+                                "role": "assistant",
+                                "content": {
+                                    "type": "streamlit_flow",
+                                    "state": st.session_state[flow_key]
+                                }
+                            })
+                            
+                            # Render the flow diagram
+                            streamlit_flow(
+                                flow_key,
+                                st.session_state[flow_key]
+                            )
+                        elif response.get("type") == "table":
+                            st.table(response["data"])
+                            st.session_state.messages.append({
+                                "id": message_id,
+                                "role": "assistant",
+                                "content": response
+                            })
+                    else:
+                        st.markdown(response)
+                        st.session_state.messages.append({
+                            "id": message_id,
+                            "role": "assistant",
+                            "content": response
+                        })
                 except Exception as e:
                     error_msg = str(e)
                     st.error(error_msg)
-                    st.session_state.messages.append({"role": "assistant", "content": error_msg})
+                    st.session_state.messages.append({
+                        "id": message_id,
+                        "role": "assistant",
+                        "content": error_msg
+                    })
     
     # Cleanup on session end
     if st.button("Sessie Beëindigen"):

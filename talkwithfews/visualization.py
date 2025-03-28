@@ -5,11 +5,23 @@ This module provides tools for generating visualizations of FEWS configurations.
 """
 
 from pydantic_ai import RunContext, ModelRetry
+from streamlit_flow import streamlit_flow
+from streamlit_flow.elements import StreamlitFlowNode, StreamlitFlowEdge
+from streamlit_flow.state import StreamlitFlowState
+from uuid import uuid4
+import pandas as pd
 
 from .models import (
     Deps,
     SQLQueryInput,
-    VisualizationRequestInput
+    VisualizationRequestInput,
+    EndpointPathRequest,
+    PathData,
+    PathFlowOutput,
+    PathTableOutput,
+    RenderPathInput,
+    RenderPathTableInput,
+    FlowState
 )
 
 from .tools import execute_query
@@ -441,4 +453,207 @@ async def generate_data_flow_visualization(ctx: RunContext[Deps], input: Visuali
         diagram = generate_mermaid_diagram(results.results, "transformation_flow")
         
         logger.info(f"Generated data flow visualization for transformation ID {input.entity_id} with depth {input.depth} and {len(results.results) if results.results else 0} nodes")
-        return diagram 
+        return diagram
+
+
+@log_tool_call
+async def get_endpoint_to_root_path(ctx: RunContext[Deps], input: EndpointPathRequest) -> PathData:
+    """
+    Get the complete path from an endpoint timeseries to its root.
+    
+    This function follows the chain backwards:
+    1. Start with endpoint timeseries (e.g., "WNS2366" from "GenerateProcesOverzichtTimeseries")
+    2. Find workflow that has this timeseries as output (e.g., "ProcesOverzicht")
+    3. Find input timeseries that feeds into this workflow
+    4. Find previous workflow that has this timeseries as output
+    5. Repeat until reaching root (e.g., raw input data)
+    
+    Args:
+        ctx: RunContext with database connection
+        input: EndpointPathRequest containing timeseries set ID
+        
+    Returns:
+        PathData: Complete path data including workflows, modules, transformations, and timeseries
+    """
+    # Query to get the complete path from endpoint to root
+    query = f"""
+    WITH RECURSIVE transformation_chain AS (
+        -- Start with the endpoint timeseries
+        SELECT 
+            ts.id as tss_id,
+            ts.modins,
+            ts.vtype,
+            ts.parid,
+            ts.qualifiers,
+            ts.tstype,
+            ts.timess,
+            ts.mic_id,
+            t.id as trafo_id,
+            t.desc as trafo_desc,
+            mc.id as mic_id,
+            mc.modins as modins_name,
+            cs.id as call_stack_id,
+            cs.wf_id,
+            cs.desc as wf_desc,
+            cs.parent_id,
+            0 as level,
+            CAST(ts.id AS TEXT) as path
+        FROM ts_sets ts
+        LEFT JOIN endpoints e ON ts.id = e.tss_id
+        -- Find workflow that has this timeseries as output
+        JOIN links l_out ON ts.id = l_out.tss_id AND l_out.inout = 'out'
+        JOIN trafos t ON l_out.trafo_id = t.id
+        JOIN modins_calls mc ON t.mic_id = mc.id
+        JOIN call_stacks cs ON mc.call_stack_id = cs.id
+        WHERE ts.id = {input.entity_id}
+        
+        UNION ALL
+        
+        -- Recursively follow the chain backwards
+        SELECT 
+            ts_in.id as tss_id,
+            ts_in.modins,
+            ts_in.vtype,
+            ts_in.parid,
+            ts_in.qualifiers,
+            ts_in.tstype,
+            ts_in.timess,
+            ts_in.mic_id,
+            t_in.id as trafo_id,
+            t_in.desc as trafo_desc,
+            mc_in.id as mic_id,
+            mc_in.modins as modins_name,
+            cs_in.id as call_stack_id,
+            cs_in.wf_id,
+            cs_in.desc as wf_desc,
+            cs_in.parent_id,
+            tc.level + 1 as level,
+            tc.path || ',' || ts_in.id as path
+        FROM transformation_chain tc
+        -- Find input timeseries of current workflow
+        JOIN links l_in ON tc.tss_id = l_in.tss_id AND l_in.inout = 'in'
+        JOIN trafos t_in ON l_in.trafo_id = t_in.id
+        -- Get only the first input timeseries for each transformation
+        JOIN (
+            SELECT l_in.trafo_id, l_in.tss_id
+            FROM links l_in
+            WHERE l_in.inout = 'in'
+            GROUP BY l_in.trafo_id
+            HAVING MIN(l_in.tss_id) = l_in.tss_id
+        ) first_input ON t_in.id = first_input.trafo_id
+        JOIN ts_sets ts_in ON first_input.tss_id = ts_in.id
+        JOIN modins_calls mc_in ON t_in.mic_id = mc_in.id
+        JOIN call_stacks cs_in ON mc_in.call_stack_id = cs_in.id
+        WHERE tc.level < {input.depth}
+        AND tc.path NOT LIKE '%' || ts_in.id || '%'  -- Prevent cycles
+    )
+    SELECT * FROM transformation_chain
+    ORDER BY level DESC
+    """
+    
+    results = await execute_query(ctx, SQLQueryInput(query=query))
+    
+    if not results.results:
+        error_msg = f"No path found for timeseries set ID {input.entity_id}"
+        logger.error(error_msg)
+        raise ModelRetry(error_msg)
+    
+    return PathData(data=results.results)
+
+@log_tool_call
+async def render_path_as_flow(ctx: RunContext[Deps], input: RenderPathInput) -> FlowState:
+    """
+    Render a path as a streamlit-flow diagram.
+    
+    Args:
+        ctx: RunContext with database connection
+        input: RenderPathInput containing the path data to render
+        
+    Returns:
+        FlowState: Streamlit-flow state for rendering
+    """
+    if not input.path_data or not input.path_data.data:
+        error_msg = "No path data provided for rendering"
+        logger.error(error_msg)
+        raise ModelRetry(error_msg)
+        
+    # Create nodes and edges for streamlit-flow
+    nodes = []
+    edges = []
+    current_x = 0
+    
+    # Process results in reverse order (from root to endpoint)
+    for row in reversed(input.path_data.data):
+        # Create timeseries set node with all its properties
+        tss_label = f"Timeseries Set:\n"
+        tss_label += f"Module: {row['modins']}\n"
+        tss_label += f"Value Type: {row['vtype']}\n"
+        tss_label += f"Parameter: {row['parid']}\n"
+        if row['qualifiers']:
+            tss_label += f"Qualifiers: {row['qualifiers']}\n"
+        tss_label += f"Type: {row['tstype']}\n"
+        tss_label += f"Time Step: {row['timess']}"
+        
+        # Create node as dictionary instead of StreamlitFlowNode object
+        node_id = str(uuid4())
+        node = {
+            'id': node_id,
+            'pos': [current_x, 0],
+            'data': {'content': tss_label},
+            'type': 'default',
+            'sourcePosition': 'right',
+            'targetPosition': 'left'
+        }
+        nodes.append(node)
+        
+        # If there's a transformation, create an edge with both transformation and workflow info
+        if row['trafo_desc'] and row['wf_desc']:
+            # Create edge as dictionary instead of StreamlitFlowEdge object
+            edge = {
+                'id': str(uuid4()),
+                'source': node_id,
+                'target': node_id if len(nodes) == 1 else nodes[-2]['id'],
+                'data': {'content': f"{row['trafo_desc']} | {row['wf_desc']}"}
+            }
+            edges.append(edge)
+        
+        current_x += 1
+    
+    # Create the streamlit-flow state
+    state = {
+        'nodes': nodes,
+        'edges': edges
+    }
+    
+    return FlowState(type="streamlit_flow", state=state)
+
+@log_tool_call
+async def render_path_as_table(ctx: RunContext[Deps], input: RenderPathTableInput) -> PathTableOutput:
+    """
+    Render a path as a table.
+    
+    Args:
+        ctx: RunContext with database connection
+        input: RenderPathTableInput containing the path data to render
+        
+    Returns:
+        PathTableOutput: Table data for rendering
+    """
+    # Convert path data to DataFrame
+    df = pd.DataFrame(input.path_data.data)
+    
+    # Select and rename columns for display
+    display_df = df[[
+        'level', 'wf_id', 'wf_desc', 'modins_name',
+        'trafo_desc', 'parid', 'qualifiers'
+    ]].rename(columns={
+        'level': 'Level',
+        'wf_id': 'Workflow',
+        'wf_desc': 'Workflow Description',
+        'modins_name': 'Module',
+        'trafo_desc': 'Transformation',
+        'parid': 'Parameter',
+        'qualifiers': 'Qualifiers'
+    })
+    
+    return PathTableOutput(data=display_df) 
