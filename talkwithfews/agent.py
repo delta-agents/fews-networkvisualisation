@@ -5,47 +5,32 @@ This module defines the agent that can answer questions about FEWS configuration
 """
 
 import os
-import json
-from pydantic_ai import Agent, Tool
+from pydantic_ai import Agent, Tool, CallToolsNode
 from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.providers.openai import OpenAIProvider
 
-from .models import (
-    Deps,
-    ToolCallTracker
-)
+from .models import Deps
 
 # Import logging utilities from the dedicated module
 from .logging_utils import logger, setup_logging
 
 from .tools import (
     execute_query,
-    explain_query,
     search_workflows,
-    get_workflow_details,
     search_timeseries,
-    get_timeseries_details,
+    describe_timeseries,
     search_transformations,
     get_transformation_details,
-    analyze_upstream_dependencies,
-    analyze_downstream_dependencies,
+    analyze_dependencies,
     find_workflow_call_hierarchy,
     get_database_schema,
-    analyze_dead_points
+    analyze_dead_points,
+    visualize_graph
 )
 
-from .visualization import (
-    generate_network_visualization,
-    generate_call_hierarchy_visualization,
-    generate_data_flow_visualization
-)
+from .utils import connect_to_database
 
-from .utils import connect_to_database, format_results_as_table, generate_mermaid_diagram
-
-from .schema_utils import extract_llm_friendly_schema, generate_llm_context, create_schema_info_dict, get_table_relationships
-
-# Create a global tracker instance for the decorator to use
-tracker = ToolCallTracker()
+from .schema_utils import extract_db_schema_as_dict, generate_llm_context
 
 class FEWSConfigAgent:
     """
@@ -87,12 +72,10 @@ class FEWSConfigAgent:
         self.base_url = base_url
         self.agent = None
         self.db_connection = None
+        self.last_tool_call = None  # Store the latest tool call's result
         
         # Set up logging
         setup_logging(log_level=log_level, log_dir=log_dir)
-        
-        # Initialize the tracking system
-        self.tracker = ToolCallTracker()
         
         logger.info(f"Initialized FEWSConfigAgent with database: {db_path}")
         logger.info(f"Using model: {self.model_name}")
@@ -133,7 +116,6 @@ class FEWSConfigAgent:
 
         db_path = self.db_path
         db_connection = self.db_connection
-        tracker = self.tracker
         
         if not db_connection:
             logger.warning("Database connection not established. Connecting now.")
@@ -143,13 +125,12 @@ class FEWSConfigAgent:
         # Set up dependencies for the agent
         deps = Deps(
             db_path=db_path,
-            db_connection=db_connection,
-            tracker=tracker
+            db_connection=db_connection
         )
         
         # Extract the database schema for the LLM
         logger.info("Extracting LLM-friendly schema information")
-        schema = extract_llm_friendly_schema(db_path)
+        schema = extract_db_schema_as_dict(db_path)
         llm_context = generate_llm_context(schema)
         
         # Set schema in deps for tools to access
@@ -157,54 +138,48 @@ class FEWSConfigAgent:
         
         # Create a comprehensive system prompt with the schema information
         system_prompt = (
-            "You are the FEWS Configuration Agent, providing technical analysis of FEWS configuration workflows "
-            "stored in SQLite databases. Users are domain experts who need concise, structured information.\n\n"
-            "You have access to the following tables in the database:\n"
-            f"{llm_context}\n\n"
-            "FORMAT YOUR RESPONSES IN A STRUCTURED WAY:\n"
-            "1. Present query results in tables whenever possible\n"
-            "2. Use diagrams to show relationships and data flows\n"
-            "3. Provide key metrics and counts at the beginning of responses\n"
-            "4. Structure insights with headers and bullet points\n\n"
-            "Avoid conversational language. Be direct and technical. Users are experts looking for insights, not conversation.\n\n"
-            "Always use the available tools to query the database and explore the configuration thoroughly before answering.\n\n"
-            "IMPORTANT: For each tool you use, provide a brief reasoning about why you're using it, starting with 'Reasoning: '."
+            "You are the FEWS Configuration Agent, specialized in analyzing FEWS (Flood Early Warning System) configurations. "
+            "Your expertise lies in understanding and explaining the relationships between time series, transformations, and workflows in FEWS configurations.\n\n"
+            "You have access to the complete database schema including:\n"
+            "1. All database tables and their columns\n"
+            "2. Relationships between tables (foreign keys, joins)\n"
+            "3. Sample data to understand the data structure\n\n"
+            f"Here's the detailed schema:\n{llm_context}\n\n"
+            "Your primary capabilities include:\n"
+            "1. Analyzing time series properties and their relationships\n"
+            "2. Tracing transformations and their input/output connections\n"
+            "3. Understanding workflow structures and module configurations\n"
+            "4. Identifying dependencies between different FEWS components\n"
+            "5. Visualizing data flows and relationships\n\n"
+            "When analyzing configurations:\n"
+            "1. Focus on the relationships between time series and transformations\n"
+            "2. Highlight workflow structures and module configurations\n"
+            "3. Identify potential issues like dead points or circular dependencies\n"
+            "4. Use diagrams to show data flows and relationships\n\n"
+            "Important Response Format Rules:\n"
+            "1. ALWAYS use the markdown tables and mermaid diagrams provided by the tools in their markdown_content\n"
+            "2. DO NOT create your own tables or diagrams - use the ones from the tools\n"
+            "3. When a tool returns markdown_content, include it directly in your response\n"
+            "4. If you need to explain the data, do so before or after the tables/diagrams\n"
+            "5. Keep your explanations concise and focused on interpreting the provided data\n\n"
+            "Always use the available tools to gather accurate information before providing analysis.\n"
+            "For each tool you use, explain your reasoning with 'Reasoning: ' followed by your explanation."
         )
             
         logger.info("Using comprehensive schema from schema_utils")
-        
-        # Callback to capture reasoning
-        def reasoning_callback(tool_name, **kwargs):
-            if 'name' in kwargs and 'thoughts' in kwargs:
-                # Get reasoning from thoughts
-                thoughts = kwargs.get('thoughts', '')
-                if thoughts and hasattr(tracker, 'set_reasoning'):
-                    # Look for reasoning in thoughts
-                    reasoning_lines = [line for line in thoughts.split('\n') 
-                                     if line.startswith('Reasoning:')]
-                    if reasoning_lines:
-                        reasoning = reasoning_lines[0].replace('Reasoning:', '').strip()
-                        tracker.set_reasoning(reasoning)
-                        logger.info(f"Agent reasoning for {tool_name}: {reasoning}")
-        
         # Set up the tools
         tools = [
             Tool(execute_query, takes_ctx=True, name="execute_query", description="Execute a SQL query against the FEWS configuration database"),
-            Tool(explain_query, takes_ctx=True, name="explain_query", description="Explain what a SQL query does without executing it"),
             Tool(search_workflows, takes_ctx=True, name="search_workflows", description="Search for workflows by name or description"),
-            Tool(get_workflow_details, takes_ctx=True, name="get_workflow_details", description="Get detailed information about a specific workflow"),
-            Tool(search_timeseries, takes_ctx=True, name="search_timeseries", description="Search for time series by parameter ID, qualifier, or other attributes"),
-            Tool(get_timeseries_details, takes_ctx=True, name="get_timeseries_details", description="Get detailed information about a specific time series"),
+            Tool(search_timeseries, takes_ctx=True, name="search_timeseries", description="Search for time series by parameter ID, qualifier, or module instance"),
+            Tool(describe_timeseries, takes_ctx=True, name="describe_timeseries", description="Get detailed information about a specific time series"),
             Tool(search_transformations, takes_ctx=True, name="search_transformations", description="Search for transformations by description or module instance"),
             Tool(get_transformation_details, takes_ctx=True, name="get_transformation_details", description="Get detailed information about a specific transformation"),
-            Tool(analyze_upstream_dependencies, takes_ctx=True, name="analyze_upstream_dependencies", description="Find what produces a specific entity"),
-            Tool(analyze_downstream_dependencies, takes_ctx=True, name="analyze_downstream_dependencies", description="Find what consumes a specific entity"),
+            Tool(analyze_dependencies, takes_ctx=True, name="analyze_dependencies", description="Analyze dependencies for a specific entity, showing both upstream and downstream relationships"),
             Tool(find_workflow_call_hierarchy, takes_ctx=True, name="find_workflow_call_hierarchy", description="Trace workflow call stacks"),
             Tool(get_database_schema, takes_ctx=True, name="get_database_schema", description="Get the database schema information to understand the structure of the FEWS configuration database"),
             Tool(analyze_dead_points, takes_ctx=True, name="analyze_dead_points", description="Identify time series sets that are neither used as inputs nor marked as endpoints ('dead points')"),
-            Tool(generate_network_visualization, takes_ctx=True, name="generate_network_visualization", description="Generate a network visualization of entities and their relationships"),
-            Tool(generate_call_hierarchy_visualization, takes_ctx=True, name="generate_call_hierarchy_visualization", description="Generate a visualization of workflow call hierarchy"),
-            Tool(generate_data_flow_visualization, takes_ctx=True, name="generate_data_flow_visualization", description="Generate a visualization of data flow through transformations")
+            Tool(visualize_graph, takes_ctx=True, name="visualize_graph", description="Generate a graph visualization of FEWS entities and their relationships")
         ]
         
         # Create the model with OpenRouter configuration
@@ -260,20 +235,15 @@ class FEWSConfigAgent:
         
         logger.info(f"Asking agent: {question}")
         
-        # Initialize a new tracker for this question
-        self.tracker = ToolCallTracker()
-        
         try:
-            # Pass deps when calling the agent
+            # Use basic run method
             response = await self.agent.run(question, deps=self.deps)
             
-            # Log summary of tool calls if available
-            if hasattr(self.tracker, 'get_summary'):
-                tool_summary = self.tracker.get_summary()
-                if tool_summary:
-                    logger.info(f"Tool usage summary: {json.dumps(tool_summary, indent=2)}")
-            
-            return response.data
+            # Convert response to string if needed
+            if hasattr(response, 'content'):
+                return response.content
+            return str(response)
+                        
         except Exception as e:
             logger.error(f"Error asking agent: {str(e)}")
             raise
