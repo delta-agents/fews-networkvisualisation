@@ -1,8 +1,8 @@
 """
-Dependency Analysis page for FEWS Network Visualization.
+Afhankelijkheidsanalyse pagina voor FEWS Netwerkvisualisatie.
 
-This page provides tools for analyzing dependencies between different entities
-in the FEWS configuration.
+Deze pagina biedt tools voor het analyseren van afhankelijkheden tussen verschillende entiteiten
+in de FEWS-configuratie.
 """
 import streamlit as st
 import asyncio
@@ -21,7 +21,7 @@ from app.components.sidebar import render_sidebar
 
 # Set page configuration
 st.set_page_config(
-    page_title="Dependency Analysis - FEWS Network Visualization",
+    page_title="Afhankelijkheidsanalyse - FEWS Netwerkvisualisatie",
     page_icon="🔗",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -32,12 +32,12 @@ config = load_config()
 
 # Render header
 render_header(
-    title=config.get("app_title", "FEWS Network Visualization"),
+    title=config.get("app_title", "FEWS Netwerkvisualisatie"),
     version=config.get("app_version", "0.2.0")
 )
 
 # Render sidebar
-sidebar_container = render_sidebar(page_title="Dependency Analysis")
+sidebar_container = render_sidebar(page_title="Afhankelijkheidsanalyse")
 
 def run_async_function(async_function, **kwargs):
     """Run an async function and return the results."""
@@ -49,46 +49,46 @@ def run_async_function(async_function, **kwargs):
         loop.close()
 
 # Main content
-st.title("Dependency Analysis")
+st.title("Afhankelijkheidsanalyse")
 
 # Check if tools interface is available
 if "tools_interface" not in st.session_state:
-    st.error("Database connection not available. Please check your configuration.")
+    st.error("Database verbinding niet beschikbaar. Controleer uw configuratie.")
     render_footer()
     st.stop()
 
 st.markdown("""
-Analyze dependencies between entities in your FEWS configuration.
-You can analyze upstream and downstream relationships for:
+Analyseer afhankelijkheden tussen entiteiten in uw FEWS-configuratie.
+U kunt upstream en downstream relaties analyseren voor:
 
-- **Time Series**: Find which transformations produce or consume a time series
-- **Transformations**: Identify input and output time series for a transformation
-- **Workflows**: Discover which workflows call or are called by a workflow
+- **Tijdreeksen**: Ontdek welke transformaties een tijdreeks produceren of gebruiken
+- **Transformaties**: Identificeer invoer- en uitvoertijdreeksen voor een transformatie
+- **Workflows**: Ontdek welke workflows een workflow aanroepen of door een workflow worden aangeroepen
 """)
 
 # Create tabs for different analysis modes
-tab1, tab2 = st.tabs(["Basic Dependency Analysis", "Advanced Graph Visualization"])
+tab1, tab2 = st.tabs(["Basis Afhankelijkheidsanalyse", "Geavanceerde Grafiekvisualisatie"])
 
 with tab1:
-    st.header("Basic Dependency Analysis")
+    st.header("Basis Afhankelijkheidsanalyse")
     
     st.markdown("""
-    Analyze the dependencies for a specific entity in the FEWS configuration.
-    Select the entity type and ID to see what it depends on and what depends on it.
+    Analyseer de afhankelijkheden voor een specifieke entiteit in de FEWS-configuratie.
+    Selecteer het entiteitstype en ID om te zien waarvan het afhankelijk is en wat ervan afhankelijk is.
     """)
     
     # Entity type
     entity_type = st.selectbox(
-        "Select Entity Type", 
+        "Selecteer Entiteitstype", 
         ["timeseries", "transformation", "workflow"],
         key="entity_type"
     )
     
     # Add an expander for finding specific IDs
-    with st.expander("Find ID by Search"):
+    with st.expander("Zoek ID via Zoekopdracht"):
         search_help = """
-        Use the search below to find the ID of the entity you want to analyze.
-        You can search by name, description, parameter, or other relevant attributes.
+        Gebruik de zoekopdracht hieronder om het ID te vinden van de entiteit die u wilt analyseren.
+        U kunt zoeken op naam, beschrijving, parameter of andere relevante attributen.
         """
         st.markdown(search_help)
         
@@ -99,13 +99,13 @@ with tab1:
             with col1:
                 param_search = st.text_input("Parameter ID", key="ts_param")
             with col2:
-                qual_search = st.text_input("Qualifier Pattern", key="ts_qual")
+                qual_search = st.text_input("Kwalificatie Patroon", key="ts_qual")
             with col3:
-                mod_search = st.text_input("Module Instance", key="ts_mod")
+                mod_search = st.text_input("Module Instantie", key="ts_mod")
             
-            if st.button("Search", key="ts_button"):
+            if st.button("Zoeken", key="ts_button"):
                 if param_search or qual_search or mod_search:
-                    with st.spinner("Searching time series..."):
+                    with st.spinner("Tijdreeksen zoeken..."):
                         try:
                             results = run_async_function(
                                 st.session_state.tools_interface.search_timeseries,
@@ -121,30 +121,30 @@ with tab1:
                                     data.append({
                                         "ID": ts.id,
                                         "Parameter": ts.parid,
-                                        "Qualifier": ts.qualifiers,
+                                        "Kwalificatie": ts.qualifiers,
                                         "Module": ts.modins
                                     })
                                 st.session_state.search_results = pd.DataFrame(data)
                                 st.dataframe(st.session_state.search_results)
                             else:
-                                st.info("No time series found matching the criteria.")
+                                st.info("Geen tijdreeksen gevonden die voldoen aan de criteria.")
                         except Exception as e:
-                            st.error(f"Error searching: {str(e)}")
+                            st.error(f"Fout bij zoeken: {str(e)}")
                 else:
-                    st.warning("Please enter at least one search term.")
+                    st.warning("Voer ten minste één zoekterm in.")
         
         # Similar search options for transformations and workflows
         elif entity_type == "transformation":
             # Transformation search
             col1, col2 = st.columns(2)
             with col1:
-                desc_search = st.text_input("Description", key="trafo_desc")
+                desc_search = st.text_input("Beschrijving", key="trafo_desc")
             with col2:
-                mod_search = st.text_input("Module (Optional)", key="trafo_mod")
+                mod_search = st.text_input("Module (Optioneel)", key="trafo_mod")
             
-            if st.button("Search", key="trafo_button"):
+            if st.button("Zoeken", key="trafo_button"):
                 if desc_search:
-                    with st.spinner("Searching transformations..."):
+                    with st.spinner("Transformaties zoeken..."):
                         try:
                             results = run_async_function(
                                 st.session_state.tools_interface.search_transformations,
@@ -158,26 +158,26 @@ with tab1:
                                 for trafo in results.results:
                                     data.append({
                                         "ID": trafo.id,
-                                        "Description": trafo.desc,
+                                        "Beschrijving": trafo.desc,
                                         "Module": trafo.modins,
                                         "Workflow": trafo.workflow_name
                                     })
                                 st.session_state.search_results = pd.DataFrame(data)
                                 st.dataframe(st.session_state.search_results)
                             else:
-                                st.info("No transformations found matching the criteria.")
+                                st.info("Geen transformaties gevonden die voldoen aan de criteria.")
                         except Exception as e:
-                            st.error(f"Error searching: {str(e)}")
+                            st.error(f"Fout bij zoeken: {str(e)}")
                 else:
-                    st.warning("Please enter a description.")
+                    st.warning("Voer een beschrijving in.")
         
         else:  # workflow
             # Workflow search
-            name_search = st.text_input("Workflow Name/Description", key="wf_name")
+            name_search = st.text_input("Workflow Naam/Beschrijving", key="wf_name")
             
-            if st.button("Search", key="wf_button"):
+            if st.button("Zoeken", key="wf_button"):
                 if name_search:
-                    with st.spinner("Searching workflows..."):
+                    with st.spinner("Workflows zoeken..."):
                         try:
                             results = run_async_function(
                                 st.session_state.tools_interface.search_workflows,
@@ -191,34 +191,34 @@ with tab1:
                                     data.append({
                                         "ID": wf.id,
                                         "Workflow": wf.wf_id,
-                                        "Description": wf.desc
+                                        "Beschrijving": wf.desc
                                     })
                                 st.session_state.search_results = pd.DataFrame(data)
                                 st.dataframe(st.session_state.search_results)
                             else:
-                                st.info("No workflows found matching the criteria.")
+                                st.info("Geen workflows gevonden die voldoen aan de criteria.")
                         except Exception as e:
-                            st.error(f"Error searching: {str(e)}")
+                            st.error(f"Fout bij zoeken: {str(e)}")
                 else:
-                    st.warning("Please enter a search term.")
+                    st.warning("Voer een zoekterm in.")
     
     # Entity ID input
     entity_id = st.number_input(
-        "Time Series ID" if entity_type == "timeseries" else 
-        "Transformation ID" if entity_type == "transformation" else 
+        "Tijdreeks ID" if entity_type == "timeseries" else 
+        "Transformatie ID" if entity_type == "transformation" else 
         "Workflow ID", 
         min_value=1, value=1, step=1
     )
     
     # Analysis options
-    st.subheader("Analysis Options")
+    st.subheader("Analyse Opties")
     
-    include_graph = st.checkbox("Include graph visualization", value=True, 
-                              help="Generate a graph visualization of dependencies")
+    include_graph = st.checkbox("Inclusief grafiekvisualisatie", value=True, 
+                              help="Genereer een grafische visualisatie van afhankelijkheden")
     
     # Analyze button
-    if st.button("Analyze Dependencies", use_container_width=True):
-        with st.spinner(f"Analyzing dependencies for {entity_type} with ID {entity_id}..."):
+    if st.button("Analyseer Afhankelijkheden", use_container_width=True):
+        with st.spinner(f"Afhankelijkheden analyseren voor {entity_type} met ID {entity_id}..."):
             try:
                 # Get dependencies
                 dependencies = run_async_function(
@@ -228,12 +228,12 @@ with tab1:
                 )
                 
                 # Display results
-                st.subheader("Dependency Analysis Results")
+                st.subheader("Resultaten Afhankelijkheidsanalyse")
                 st.markdown(dependencies.markdown_content)
                 
                 # Generate graph if requested
                 if include_graph:
-                    with st.spinner("Generating graph visualization..."):
+                    with st.spinner("Grafiekvisualisatie genereren..."):
                         graph = run_async_function(
                             st.session_state.tools_interface.visualize_graph,
                             root_entity_id=entity_id,
@@ -244,37 +244,37 @@ with tab1:
                             direction="LR"
                         )
                         
-                        st.subheader("Graph Visualization")
+                        st.subheader("Grafiekvisualisatie")
                         st.markdown(graph.markdown_content)
                         
                         # Options to customize the graph
-                        st.subheader("Customize Graph")
+                        st.subheader("Grafiek Aanpassen")
                         
                         col1, col2, col3 = st.columns(3)
                         
                         with col1:
-                            max_depth = st.slider("Max Depth", min_value=1, max_value=5, value=2)
+                            max_depth = st.slider("Max Diepte", min_value=1, max_value=5, value=2)
                         
                         with col2:
                             max_nodes = st.slider("Max Nodes", min_value=10, max_value=100, value=30)
                         
                         with col3:
                             direction = st.selectbox(
-                                "Direction",
+                                "Richting",
                                 options=["LR", "RL", "TB", "BT"],
                                 index=0,
                                 format_func=lambda x: {
-                                    "LR": "Left to Right",
-                                    "RL": "Right to Left",
-                                    "TB": "Top to Bottom",
-                                    "BT": "Bottom to Top"
+                                    "LR": "Links naar Rechts",
+                                    "RL": "Rechts naar Links",
+                                    "TB": "Boven naar Beneden",
+                                    "BT": "Beneden naar Boven"
                                 }[x],
                                 key="direction_select"
                             )
                         
                         # Button to regenerate graph with new settings
-                        if st.button("Regenerate Graph"):
-                            with st.spinner("Generating updated graph..."):
+                        if st.button("Grafiek Opnieuw Genereren"):
+                            with st.spinner("Bijgewerkte grafiek genereren..."):
                                 graph = run_async_function(
                                     st.session_state.tools_interface.visualize_graph,
                                     root_entity_id=entity_id,
@@ -286,28 +286,28 @@ with tab1:
                                 )
                                 st.markdown(graph.markdown_content)
             except Exception as e:
-                st.error(f"Error analyzing dependencies: {str(e)}")
+                st.error(f"Fout bij analyseren van afhankelijkheden: {str(e)}")
 
 with tab2:
-    st.header("Custom Graph Builder")
+    st.header("Aangepaste Grafiek Bouwer")
     
     st.markdown("""
-    Build a custom graph visualization starting from any entity in the FEWS configuration.
-    You can customize the visualization to show the desired level of detail and scope.
+    Bouw een aangepaste grafiekvisualisatie startend vanaf elke entiteit in de FEWS-configuratie.
+    U kunt de visualisatie aanpassen om het gewenste detailniveau en bereik te tonen.
     """)
     
     # Entity type
     graph_entity_type = st.selectbox(
-        "Select Entity Type", 
+        "Selecteer Entiteitstype", 
         ["timeseries", "transformation", "workflow"],
         key="graph_entity_type"
     )
     
     # Search for specific IDs
-    with st.expander("Find ID by Search"):
+    with st.expander("Zoek ID via Zoekopdracht"):
         search_help = """
-        Use the search below to find the ID of the entity you want to start your graph from.
-        You can search by name, description, parameter, or other relevant attributes.
+        Gebruik de zoekopdracht hieronder om het ID te vinden van de entiteit waarvanaf u uw grafiek wilt starten.
+        U kunt zoeken op naam, beschrijving, parameter of andere relevante attributen.
         """
         st.markdown(search_help)
         
@@ -318,13 +318,13 @@ with tab2:
             with col1:
                 param_graph_search = st.text_input("Parameter", key="graph_ts_param")
             with col2:
-                qual_graph_search = st.text_input("Qualifier", key="graph_ts_qual")
+                qual_graph_search = st.text_input("Kwalificatie", key="graph_ts_qual")
             with col3:
                 mod_graph_search = st.text_input("Module", key="graph_ts_mod")
                 
-            if st.button("Search", key="graph_ts_button"):
+            if st.button("Zoeken", key="graph_ts_button"):
                 if param_graph_search or qual_graph_search or mod_graph_search:
-                    with st.spinner("Searching time series..."):
+                    with st.spinner("Tijdreeksen zoeken..."):
                         try:
                             results = run_async_function(
                                 st.session_state.tools_interface.search_timeseries,
@@ -340,30 +340,30 @@ with tab2:
                                     data.append({
                                         "ID": ts.id,
                                         "Parameter": ts.parid,
-                                        "Qualifier": ts.qualifiers,
+                                        "Kwalificatie": ts.qualifiers,
                                         "Module": ts.modins
                                     })
                                 st.session_state.graph_search_results = pd.DataFrame(data)
                                 st.dataframe(st.session_state.graph_search_results)
                             else:
-                                st.info("No time series found matching the criteria.")
+                                st.info("Geen tijdreeksen gevonden die voldoen aan de criteria.")
                         except Exception as e:
-                            st.error(f"Error searching: {str(e)}")
+                            st.error(f"Fout bij zoeken: {str(e)}")
                 else:
-                    st.warning("Please enter at least one search term.")
+                    st.warning("Voer ten minste één zoekterm in.")
         
         # Similar search options for transformations and workflows
         elif graph_entity_type == "transformation":
             # Transformation search
             col1, col2 = st.columns(2)
             with col1:
-                desc_graph_search = st.text_input("Description", key="graph_trafo_desc")
+                desc_graph_search = st.text_input("Beschrijving", key="graph_trafo_desc")
             with col2:
-                mod_graph_search = st.text_input("Module (Optional)", key="graph_trafo_mod")
+                mod_graph_search = st.text_input("Module (Optioneel)", key="graph_trafo_mod")
                 
-            if st.button("Search", key="graph_trafo_button"):
+            if st.button("Zoeken", key="graph_trafo_button"):
                 if desc_graph_search:
-                    with st.spinner("Searching transformations..."):
+                    with st.spinner("Transformaties zoeken..."):
                         try:
                             results = run_async_function(
                                 st.session_state.tools_interface.search_transformations,
@@ -377,26 +377,26 @@ with tab2:
                                 for trafo in results.results:
                                     data.append({
                                         "ID": trafo.id,
-                                        "Description": trafo.desc,
+                                        "Beschrijving": trafo.desc,
                                         "Module": trafo.modins,
                                         "Workflow": trafo.workflow_name
                                     })
                                 st.session_state.graph_search_results = pd.DataFrame(data)
                                 st.dataframe(st.session_state.graph_search_results)
                             else:
-                                st.info("No transformations found matching the criteria.")
+                                st.info("Geen transformaties gevonden die voldoen aan de criteria.")
                         except Exception as e:
-                            st.error(f"Error searching: {str(e)}")
+                            st.error(f"Fout bij zoeken: {str(e)}")
                 else:
-                    st.warning("Please enter a description.")
+                    st.warning("Voer een beschrijving in.")
         
         else:  # workflow
             # Workflow search
-            name_graph_search = st.text_input("Workflow Name/Description", key="graph_wf_name")
+            name_graph_search = st.text_input("Workflow Naam/Beschrijving", key="graph_wf_name")
                 
-            if st.button("Search", key="graph_wf_button"):
+            if st.button("Zoeken", key="graph_wf_button"):
                 if name_graph_search:
-                    with st.spinner("Searching workflows..."):
+                    with st.spinner("Workflows zoeken..."):
                         try:
                             results = run_async_function(
                                 st.session_state.tools_interface.search_workflows,
@@ -410,62 +410,62 @@ with tab2:
                                     data.append({
                                         "ID": wf.id,
                                         "Workflow": wf.wf_id,
-                                        "Description": wf.desc
+                                        "Beschrijving": wf.desc
                                     })
                                 st.session_state.graph_search_results = pd.DataFrame(data)
                                 st.dataframe(st.session_state.graph_search_results)
                             else:
-                                st.info("No workflows found matching the criteria.")
+                                st.info("Geen workflows gevonden die voldoen aan de criteria.")
                         except Exception as e:
-                            st.error(f"Error searching: {str(e)}")
+                            st.error(f"Fout bij zoeken: {str(e)}")
                 else:
-                    st.warning("Please enter a search term.")
+                    st.warning("Voer een zoekterm in.")
     
     # Entity ID input for graph visualization - use session state if available
     custom_entity_id = st.number_input(
-        "Time Series ID" if graph_entity_type == "timeseries" else 
-        "Transformation ID" if graph_entity_type == "transformation" else 
+        "Tijdreeks ID" if graph_entity_type == "timeseries" else 
+        "Transformatie ID" if graph_entity_type == "transformation" else 
         "Workflow ID", 
         min_value=1, value=1, step=1, key="custom_entity_id"
     )
     
     # Visualization parameters
-    st.subheader("Visualization Parameters")
+    st.subheader("Visualisatie Parameters")
     
     col1, col2 = st.columns(2)
     
     with col1:
-        custom_max_depth = st.slider("Max Depth", min_value=1, max_value=5, value=3, 
-                                   help="Maximum number of relationship levels to display", key="custom_max_depth")
+        custom_max_depth = st.slider("Max Diepte", min_value=1, max_value=5, value=3, 
+                                   help="Maximaal aantal relatieniveaus om weer te geven", key="custom_max_depth")
     
     with col2:
         custom_max_nodes = st.slider("Max Nodes", min_value=10, max_value=100, value=50, 
-                                    help="Maximum number of nodes to include in the graph", key="custom_max_nodes")
+                                    help="Maximaal aantal nodes om in de grafiek op te nemen", key="custom_max_nodes")
     
     col1, col2 = st.columns(2)
     
     with col1:
         custom_direction = st.selectbox(
-            "Graph Direction",
+            "Grafiek Richting",
             options=["LR", "RL", "TB", "BT"],
             index=0,
             format_func=lambda x: {
-                "LR": "Left to Right",
-                "RL": "Right to Left",
-                "TB": "Top to Bottom",
-                "BT": "Bottom to Top"
+                "LR": "Links naar Rechts",
+                "RL": "Rechts naar Links",
+                "TB": "Boven naar Beneden",
+                "BT": "Beneden naar Boven"
             }[x],
-            help="Direction in which the graph should flow",
+            help="Richting waarin de grafiek moet stromen",
             key="custom_direction"
         )
     
     with col2:
-        include_properties = st.checkbox("Include Properties", value=True, 
-                                       help="Show additional properties for each node", key="include_properties")
+        include_properties = st.checkbox("Inclusief Eigenschappen", value=True, 
+                                       help="Toon aanvullende eigenschappen voor elke node", key="include_properties")
     
     # Generate custom graph
-    if st.button("Generate Custom Graph", use_container_width=True):
-        with st.spinner("Generating custom graph visualization..."):
+    if st.button("Genereer Aangepaste Grafiek", use_container_width=True):
+        with st.spinner("Aangepaste grafiekvisualisatie genereren..."):
             try:
                 # Generate graph visualization
                 graph = run_async_function(
@@ -479,15 +479,15 @@ with tab2:
                 )
                 
                 # Display graph
-                st.subheader("Custom Graph Visualization")
+                st.subheader("Aangepaste Grafiekvisualisatie")
                 st.markdown(graph.markdown_content)
                 
                 # Option to save graph parameters
-                if st.button("Save This Configuration"):
+                if st.button("Sla Deze Configuratie Op"):
                     if "saved_graph_configs" not in st.session_state:
                         st.session_state.saved_graph_configs = []
                     
-                    config_name = st.text_input("Configuration Name", value=f"{graph_entity_type}_{custom_entity_id}")
+                    config_name = st.text_input("Configuratie Naam", value=f"{graph_entity_type}_{custom_entity_id}")
                     
                     if config_name:
                         # Save the configuration
@@ -502,20 +502,20 @@ with tab2:
                         }
                         
                         st.session_state.saved_graph_configs.append(new_config)
-                        st.success(f"Configuration '{config_name}' saved!")
+                        st.success(f"Configuratie '{config_name}' opgeslagen!")
             except Exception as e:
-                st.error(f"Error generating custom graph visualization: {str(e)}")
+                st.error(f"Fout bij genereren van aangepaste grafiekvisualisatie: {str(e)}")
     
     # Show saved configurations
     if "saved_graph_configs" in st.session_state and st.session_state.saved_graph_configs:
-        st.subheader("Saved Graph Configurations")
+        st.subheader("Opgeslagen Grafiek Configuraties")
         
         for idx, config in enumerate(st.session_state.saved_graph_configs):
             st.markdown(f"**{config['name']}**: {config['entity_type']} (ID: {config['entity_id']})")
             
             col1, col2 = st.columns(2)
             with col1:
-                if st.button(f"Load", key=f"load_{idx}"):
+                if st.button(f"Laden", key=f"load_{idx}"):
                     # Load the configuration
                     st.session_state.graph_entity_type = config["entity_type"]
                     st.session_state.custom_entity_id = config["entity_id"]
@@ -526,7 +526,7 @@ with tab2:
                     st.experimental_rerun()
             
             with col2:
-                if st.button(f"Delete", key=f"delete_{idx}"):
+                if st.button(f"Verwijderen", key=f"delete_{idx}"):
                     # Remove the configuration
                     st.session_state.saved_graph_configs.pop(idx)
                     st.experimental_rerun()

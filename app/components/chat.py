@@ -4,9 +4,12 @@ Chat interface components for the FEWS chat application.
 import streamlit as st
 import asyncio
 from talkwithfews.agent import FEWSConfigAgent
+from streamlit_markdown import st_markdown
+from talkwithfews.models import AgentResponse
 import threading
 from queue import Queue, Empty
 import time
+import re
 
 class AgentManager:
     def __init__(self, config):
@@ -96,8 +99,11 @@ class AgentManager:
                 try:
                     response = self.response_queue.get(timeout=1)
                     self.processing = False
-                    if response.startswith("Fout:"):
+                    
+                    # Check if response is an error message (string)
+                    if isinstance(response, str) and response.startswith("Fout:"):
                         raise Exception(response)
+                    
                     return response
                 except Empty:
                     if not self.processing:
@@ -123,6 +129,54 @@ class AgentManager:
         self.processing = False
         self.error = None
 
+def render_mermaid(markdown_text):
+    """
+    Render mermaid diagrams in markdown text using HTML components.
+    
+    Args:
+        markdown_text: The markdown text containing mermaid diagrams
+        
+    Returns:
+        The markdown text with the mermaid diagrams extracted, and the diagrams are rendered separately
+    """
+    # Check if there's a mermaid diagram
+    mermaid_pattern = r"```mermaid\s*([\s\S]*?)\s*```"
+    mermaid_matches = re.findall(mermaid_pattern, markdown_text)
+    
+    if not mermaid_matches:
+        # No mermaid diagram, just render the markdown
+        st.markdown(markdown_text)
+        return
+    
+    # Extract the mermaid diagram and render the rest as markdown
+    markdown_without_mermaid = re.sub(mermaid_pattern, "", markdown_text)
+    if markdown_without_mermaid.strip():
+        st.markdown(markdown_without_mermaid)
+    
+    # Render each mermaid diagram using HTML
+    for mermaid_code in mermaid_matches:
+        mermaid_html = f"""
+        <div class="mermaid-container" style="width:100%; overflow:visible;">
+            <pre class="mermaid" style="overflow:visible;">
+                {mermaid_code.strip()}
+            </pre>
+        </div>
+        <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+        <script>
+            mermaid.initialize({{
+                startOnLoad: true,
+                theme: 'default',
+                securityLevel: 'loose',
+                flowchart: {{ 
+                    useMaxWidth: false,
+                    htmlLabels: true,
+                    curve: 'basis'
+                }}
+            }});
+        </script>
+        """
+        st.components.v1.html(mermaid_html, height=500, scrolling=True)
+
 def initialize_chat_session():
     """Initialize chat history in session state."""
     if "messages" not in st.session_state:
@@ -147,7 +201,27 @@ def render_chat_interface(config):
     # Display chat messages
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+            if message["role"] == "assistant" and isinstance(message["content"], dict):
+                # Combine all markdown components into a single string
+                combined_markdown = message["content"].get("markdown_text", "")
+                
+                if message["content"].get("markdown_table"):
+                    combined_markdown += "\n\n" + message["content"]["markdown_table"]
+                
+                if message["content"].get("mermaid_diagram"):
+                    # Ensure mermaid diagram is properly wrapped in code block syntax
+                    mermaid_content = message["content"]["mermaid_diagram"]
+                    if not mermaid_content.startswith("```mermaid"):
+                        mermaid_content = "```mermaid\n" + mermaid_content
+                    if not mermaid_content.endswith("```"):
+                        mermaid_content = mermaid_content + "\n```"
+                    combined_markdown += "\n\n" + mermaid_content
+                
+                # Display the combined markdown
+                st_markdown(combined_markdown, height=600)
+            else:
+                # Display plain text message
+                st.markdown(message["content"])
     
     # Chat input
     if prompt := st.chat_input("Stel een vraag over je FEWS configuratie..."):
@@ -161,8 +235,40 @@ def render_chat_interface(config):
             with st.spinner("Denken..."):
                 try:
                     response = st.session_state.agent_manager.ask(prompt)
-                    st.markdown(response)
-                    st.session_state.messages.append({"role": "assistant", "content": response})
+                    
+                    # Handle different response types based on response structure
+                    if hasattr(response, 'data'):
+                        # AgentRunResult with data property containing AgentResponse
+                        # Combine all markdown components into a single string
+                        combined_markdown = response.data.markdown_text or ""
+                        
+                        if response.data.markdown_table:
+                            combined_markdown += "\n\n" + response.data.markdown_table
+                        
+                        if response.data.mermaid_diagram:
+                            # Ensure mermaid diagram is properly wrapped in code block syntax
+                            mermaid_content = response.data.mermaid_diagram
+                            if not mermaid_content.startswith("```mermaid"):
+                                mermaid_content = "```mermaid\n" + mermaid_content
+                            if not mermaid_content.endswith("```"):
+                                mermaid_content = mermaid_content + "\n```"
+                            combined_markdown += "\n\n" + mermaid_content
+                        
+                        # Display the combined markdown
+                        st_markdown(combined_markdown, height=600)
+                        
+                        # Store as dict for session state
+                        content_dict = {
+                            "markdown_text": response.data.markdown_text,
+                            "markdown_table": response.data.markdown_table,
+                            "mermaid_diagram": response.data.mermaid_diagram
+                        }
+                        st.session_state.messages.append({"role": "assistant", "content": content_dict})
+                    else:
+                        # Legacy or string response
+                        st.markdown(response)
+                        st.session_state.messages.append({"role": "assistant", "content": response})
+                        
                 except Exception as e:
                     error_msg = str(e)
                     st.error(error_msg)

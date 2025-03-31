@@ -1,7 +1,7 @@
 """
-Search and Exploration page for FEWS Network Visualization.
+Zoeken en Verkennen pagina voor FEWS Netwerkvisualisatie.
 
-This page provides access to search for workflows, time series, and transformations.
+Deze pagina biedt toegang tot zoekfuncties voor workflows, tijdreeksen en transformaties.
 """
 import streamlit as st
 import asyncio
@@ -15,19 +15,20 @@ from streamlit_flow.elements import StreamlitFlowNode, StreamlitFlowEdge
 from streamlit_flow.state import StreamlitFlowState
 from streamlit import components
 
-# Add a function to render Mermaid diagrams
+# Functie om Mermaid-diagrammen weer te geven
 def render_mermaid(mermaid_code, height=200):
     """
-    Renders a Mermaid diagram from the provided code using JavaScript.
+    Geeft een Mermaid-diagram weer van de gegeven code met behulp van JavaScript.
     
     Args:
-        mermaid_code: The Mermaid diagram code to render
-        height: Optional height in pixels (default: 200)
+        mermaid_code: De Mermaid-diagramcode om weer te geven
+        height: Optionele hoogte in pixels (standaard: 200)
     """
-    # Create a unique ID for this diagram
+    
+    # Maak een unieke ID voor dit diagram
     diagram_id = f"mermaid-diagram-{random.randint(1, 100000)}"
     
-    # HTML with embedded Mermaid JS
+    # HTML met ingesloten Mermaid JS
     html = f"""
     <!DOCTYPE html>
     <html>
@@ -37,7 +38,7 @@ def render_mermaid(mermaid_code, height=200):
             document.addEventListener('DOMContentLoaded', function() {{
                 mermaid.initialize({{ 
                     startOnLoad: true,
-                    // Use more compact styling
+                    // Gebruik compactere stijl
                     themeVariables: {{
                         nodePadding: 4,
                         nodeSpacing: 20,
@@ -52,7 +53,7 @@ def render_mermaid(mermaid_code, height=200):
                 width: 100%;
                 overflow: visible;
             }}
-            /* Make text smaller in the diagram */
+            /* Maak tekst kleiner in het diagram */
             .mermaid .label {{
                 font-size: 12px;
             }}
@@ -66,43 +67,43 @@ def render_mermaid(mermaid_code, height=200):
     </html>
     """
     
-    # Render the HTML with custom height
+    # Geef de HTML weer met aangepaste hoogte
     components.v1.html(html, height=height)
 
-# Helper function to estimate diagram height based on content complexity
+# Helperfunctie om diagramhoogte te schatten op basis van complexiteit
 def estimate_diagram_height(mermaid_code):
     """
-    Estimate an appropriate height for the diagram based on its complexity.
+    Schat een geschikte hoogte voor het diagram op basis van de complexiteit.
     
     Args:
-        mermaid_code: The Mermaid diagram code
+        mermaid_code: De Mermaid-diagramcode
         
     Returns:
-        Estimated height in pixels
+        Geschatte hoogte in pixels
     """
-    # Count input and output time series connections
+    # Tel inkomende en uitgaande tijdreeksen verbindingen
     lines = mermaid_code.strip().split('\n')
     
-    # Look for edges connecting to time series
+    # Zoek naar randen die verbonden zijn met tijdreeksen
     in_ts_count = 0
     out_ts_count = 0
     
     for line in lines:
-        # Check for input time series (edges ending at ts_)
+        # Controleer op invoertijdreeksen (randen die eindigen bij ts_)
         if re.search(r'\w+\s*-->\s*ts_\d+', line):
             in_ts_count += 1
-        # Check for output time series (edges starting from ts_)
+        # Controleer op uitvoertijdreeksen (randen die beginnen bij ts_)
         if re.search(r'ts_\d+\s*-->', line):
             out_ts_count += 1
     
-    # Use the maximum count of input or output time series
+    # Gebruik het maximum aantal van invoer- of uitvoertijdreeksen
     ts_count = max(in_ts_count, out_ts_count)
     
-    # Calculate height based on time series count with lower values
+    # Bereken hoogte op basis van aantal tijdreeksen met lagere waarden
     height_per_ts = 20
     base_height = 15
     
-    # If no time series found, fall back to node counting method
+    # Als er geen tijdreeksen gevonden zijn, val terug op nodetelling
     if ts_count == 0:
         node_count = sum(1 for line in lines if re.search(r'\w+(\[.*?\]|\(.*?\)|\>.*?\]|\{.*?\})', line))
         edge_count = sum(1 for line in lines if re.search(r'\w+\s*-->', line))
@@ -110,156 +111,40 @@ def estimate_diagram_height(mermaid_code):
     else:
         height = base_height + ts_count * height_per_ts
     
-    # Ensure reasonable bounds on height
+    # Zorg voor redelijke grenzen aan de hoogte
     return max(150, min(height, 600))
 
-# Add function to enhance mermaid diagrams with more detailed information
-def enhance_mermaid_diagram(mermaid_code, details=None):
-    """
-    Enhances a mermaid diagram by adding more detailed information about entities.
-    
-    Args:
-        mermaid_code: The original mermaid diagram code
-        details: Optional details object containing additional information
-        
-    Returns:
-        Enhanced mermaid diagram code
-    """
-    # Parse the mermaid code to identify nodes
-    lines = mermaid_code.strip().split('\n')
-    enhanced_lines = []
-    
-    # Cache for already fetched details to avoid duplicate API calls
-    timeseries_cache = {}
-    transformation_cache = {}
-    
-    for line in lines:
-        enhanced_line = line
-        
-        # Check if this is a node definition line
-        node_match = re.search(r'(\w+)(\[.*?\]|\(.*?\)|\>.*?\]|\{.*?\})', line)
-        if node_match:
-            node_id = node_match.group(1).strip()
-            
-            # Check if this is a time series node (typically starts with "ts_")
-            if node_id.startswith("ts_"):
-                try:
-                    # Extract the time series ID from the node ID
-                    ts_id = int(node_id.replace("ts_", ""))
-                    
-                    # Use cached data if available
-                    if ts_id in timeseries_cache:
-                        ts_info = timeseries_cache[ts_id]
-                    else:
-                        # Use describe_timeseries tool instead of custom SQL
-                        ts_details = run_async_search(
-                            st.session_state.tools_interface.describe_timeseries,
-                            timeseries_id=ts_id,
-                            include_transformations=False  # Just need basic info
-                        )
-                        
-                        if ts_details and ts_details.results:
-                            ts_info = ts_details.results[0]
-                            # Cache the result
-                            timeseries_cache[ts_id] = ts_info
-                        else:
-                            # No details available, keep original line
-                            enhanced_lines.append(line)
-                            continue
-                    
-                    # Create a detailed label
-                    detailed_label = f"{ts_info.modins}•{ts_info.vtype}•{ts_info.parid}•{ts_info.qualifiers or ''}•{ts_info.tstype}•{ts_info.timess}"
-                    
-                    # Replace the existing label with the detailed one
-                    if "[" in line:
-                        enhanced_line = re.sub(r'(\w+)(\[.*?\])', f"\\1[{detailed_label}]", line)
-                    elif "(" in line:
-                        enhanced_line = re.sub(r'(\w+)(\(.*?\))', f"\\1({detailed_label})", line)
-                    elif "{" in line:
-                        enhanced_line = re.sub(r'(\w+)(\{.*?\})', f"\\1{{{detailed_label}}}", line)
-                except Exception as e:
-                    # If anything fails, keep the original line
-                    pass
-            
-            # Check if this is a transformation node (typically starts with "trafo_")
-            elif node_id.startswith("trafo_"):
-                try:
-                    # Extract the transformation ID from the node ID
-                    trafo_id = int(node_id.replace("trafo_", ""))
-                    
-                    # Use cached data if available
-                    if trafo_id in transformation_cache:
-                        trafo_info = transformation_cache[trafo_id]
-                    else:
-                        # Check if details were provided (optimization)
-                        if details and details.results and details.results[0].id == trafo_id:
-                            trafo_info = details.results[0]
-                        else:
-                            # Use get_transformation_details tool
-                            trafo_details = run_async_search(
-                                st.session_state.tools_interface.get_transformation_details,
-                                transformation_id=trafo_id
-                            )
-                            
-                            if trafo_details and trafo_details.results:
-                                trafo_info = trafo_details.results[0]
-                                # Cache the result
-                                transformation_cache[trafo_id] = trafo_info
-                            else:
-                                # No details available, keep original line
-                                enhanced_lines.append(line)
-                                continue
-                    
-                    # Create a detailed label with description and module config
-                    detailed_label = f"{trafo_info.desc} (Module: {trafo_info.modins}, Order: {trafo_info.ord_nr})"
-                    
-                    # Replace the existing label with the detailed one
-                    if "[" in line:
-                        enhanced_line = re.sub(r'(\w+)(\[.*?\])', f"\\1[{detailed_label}]", line)
-                    elif "(" in line:
-                        enhanced_line = re.sub(r'(\w+)(\(.*?\))', f"\\1({detailed_label})", line)
-                    elif "{" in line:
-                        enhanced_line = re.sub(r'(\w+)(\{.*?\})', f"\\1{{{detailed_label}}}", line)
-                except Exception as e:
-                    # If anything fails, keep the original line
-                    pass
-        
-        enhanced_lines.append(enhanced_line)
-    
-    return '\n'.join(enhanced_lines)
-
-# Add parent directory to path for imports
+# Voeg oudermap toe aan pad voor imports
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
-# Import application components
+# Importeer applicatiecomponenten
 from app.utils.config import load_config
 from app.components.header import render_header
 from app.components.footer import render_footer
 from app.components.sidebar import render_sidebar
-from app.utils.tools_interface import ToolsInterface
 
-# Set page configuration
+# Stel paginaconfiguratie in
 st.set_page_config(
-    page_title="Search and Exploration - FEWS Network Visualization",
+    page_title="Zoeken en Verkennen - FEWS Netwerkvisualisatie",
     page_icon="🔍",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Load configuration
+# Laad configuratie
 config = load_config()
 
-# Render header
+# Geef header weer
 render_header(
-    title=config.get("app_title", "FEWS Network Visualization"),
+    title=config.get("app_title", "FEWS Netwerkvisualisatie"),
     version=config.get("app_version", "0.2.0")
 )
 
-# Render sidebar
-sidebar_container = render_sidebar(page_title="Search & Exploration")
+# Geef sidebar weer
+sidebar_container = render_sidebar(page_title="Zoeken & Verkennen")
 
 def run_async_search(search_function, **kwargs):
-    """Run an async function and return the results."""
+    """Voer een asynchrone functie uit en retourneer de resultaten."""
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     try:
@@ -267,213 +152,708 @@ def run_async_search(search_function, **kwargs):
     finally:
         loop.close()
 
+def execute_custom_query(query):
+    """Voer een aangepaste SQL-query uit met behulp van de tools interface."""
+    return st.session_state.tools_interface.execute_custom_query(query=query)
+
 def display_timeseries_results(results):
-    """Display time series search results."""
-    st.markdown(results.markdown_content)
+    """Geef tijdreeks-zoekresultaten weer in een vereenvoudigd formaat."""
+    if not results.results:
+        st.info("Geen tijdreeksen gevonden die voldoen aan uw criteria.")
+        return
+        
+    # Converteer resultaten naar DataFrame voor betere weergave
+    data = []
+    for ts in results.results:
+        # Haal eindpuntinformatie op
+        endpoint_info = ""
+        if hasattr(ts, 'endpoint') and ts.endpoint:
+            if hasattr(ts, 'endpoint_desc') and ts.endpoint_desc:
+                endpoint_info = ts.endpoint_desc
+            else:
+                endpoint_info = "✓"
+        
+        data.append({
+            "ID": ts.id,
+            "Module": ts.modins,
+            "Parameter": ts.parid,
+            "Kwalificaties": ts.qualifiers,
+            "Type": ts.tstype,
+            "Tijdstap": ts.timess,
+            "Waarde Type": ts.vtype,
+            "Eindpunt": endpoint_info
+        })
     
-    if results.results:
-        # Convert results to DataFrame for better display
-        data = []
-        for ts in results.results:
-            data.append({
-                "ID": ts.id,
-                "Module": ts.modins,
-                "Parameter": ts.parid,
-                "Qualifiers": ts.qualifiers,
-                "Type": ts.tstype,
-                "Time Step": ts.timess,
-                "Value Type": ts.vtype
-            })
-        
-        df = pd.DataFrame(data)
-        
-        # Add filter options
-        col1, col2 = st.columns(2)
-        with col1:
-            if len(df["Module"].unique()) > 1:
-                module_filter = st.multiselect(
-                    "Filter by Module",
-                    options=sorted(df["Module"].unique()),
-                    default=[]
-                )
-            else:
-                module_filter = []
-                
-        with col2:
-            if len(df["Parameter"].unique()) > 1:
-                parameter_filter = st.multiselect(
-                    "Filter by Parameter",
-                    options=sorted(df["Parameter"].unique()),
-                    default=[]
-                )
-            else:
-                parameter_filter = []
-        
-        # Apply filters
-        filtered_df = df.copy()
-        if module_filter:
-            filtered_df = filtered_df[filtered_df["Module"].isin(module_filter)]
-        if parameter_filter:
-            filtered_df = filtered_df[filtered_df["Parameter"].isin(parameter_filter)]
-        
-        # Add sorting options
-        sort_column = st.selectbox("Sort by", df.columns.tolist(), key="timeseries_sort")
-        sort_ascending = st.checkbox("Ascending order", True, key="timeseries_sort_order")
-        
-        # Sort and display as table
-        filtered_df_sorted = filtered_df.sort_values(by=sort_column, ascending=sort_ascending)
-        st.dataframe(filtered_df_sorted, use_container_width=True)
-        
-        # Add metrics about the results
-        st.markdown(f"**Found {len(filtered_df)} time series** (filtered from {len(df)} total results)")
-        
-        # Download option
+    df = pd.DataFrame(data)
+    
+    # Basis filtering - alleen Parameter filter
+    filters = {}
+    
+    if len(df["Parameter"].unique()) > 1:
+        filters["Parameter"] = st.multiselect(
+            "Filter op Parameter",
+            options=sorted(df["Parameter"].unique()),
+            default=[]
+        )
+    
+    # Pas filters toe
+    filtered_df = df.copy()
+    for column, selected_values in filters.items():
+        if selected_values:
+            filtered_df = filtered_df[filtered_df[column].isin(selected_values)]
+    
+    # Sorteren
+    sort_column = st.selectbox("Sorteer op", df.columns.tolist(), key="timeseries_sort")
+    sort_ascending = st.checkbox("Oplopende volgorde", True, key="timeseries_sort_order")
+    filtered_df_sorted = filtered_df.sort_values(by=sort_column, ascending=sort_ascending)
+    
+    # Toon resultaten
+    st.dataframe(filtered_df_sorted, use_container_width=True)
+    st.markdown(f"**{len(filtered_df)} tijdreeksen gevonden** (gefilterd van {len(df)} totale resultaten)")
+    
+    # Download resultaten
+    if len(filtered_df) > 0:
         csv = filtered_df.to_csv(index=False)
         st.download_button(
-            label="Download filtered results as CSV",
+            label="Download Resultaten (CSV)",
             data=csv,
-            file_name="timeseries_search_results.csv",
-            mime="text/csv"
+            file_name="tijdreeks_resultaten.csv",
+            mime="text/csv",
         )
+    
+    # Selecteer tijdreeks voor details
+    st.subheader("Bekijk Tijdreeks Details")
+    
+    def on_timeseries_select():
+        st.session_state.selected_timeseries_id = st.session_state.timeseries_selector
+        st.session_state.timeseries_details_view_active = True
         
-        # View details options
-        st.subheader("View Time Series Details")
-        
-        # Create a callback function to update the details view when selection changes
-        def on_timeseries_select():
-            st.session_state.selected_timeseries_id = st.session_state.timeseries_selector
-            st.session_state.timeseries_details_view_active = True
-            
-        # Use the on_change parameter to trigger the update when selection changes
-        selected_timeseries = st.selectbox(
-            "Select a time series to view details",
-            options=filtered_df["ID"].tolist(),
-            format_func=lambda x: f"{x} - {filtered_df.loc[filtered_df['ID'] == x, 'Parameter'].iloc[0]} ({filtered_df.loc[filtered_df['ID'] == x, 'Module'].iloc[0]})",
-            key="timeseries_selector",
-            on_change=on_timeseries_select
-        )
-        
-        # Remove the View Details button
-    else:
-        st.info("No time series found matching your criteria.")
+    st.selectbox(
+        "Selecteer een tijdreeks om details te bekijken",
+        options=filtered_df["ID"].tolist(),
+        format_func=lambda x: f"{x} - {filtered_df.loc[filtered_df['ID'] == x, 'Parameter'].iloc[0]} ({filtered_df.loc[filtered_df['ID'] == x, 'Module'].iloc[0]})",
+        key="timeseries_selector",
+        on_change=on_timeseries_select
+    )
 
 def display_transformation_results(results):
-    """Display transformation search results."""
-    # Remove the markdown table display
+    """Geef transformatie-zoekresultaten weer in een vereenvoudigd formaat."""
+    if not results.results:
+        st.info("Geen transformaties gevonden die voldoen aan uw criteria.")
+        return
+        
+    # Converteer resultaten naar DataFrame voor betere weergave
+    data = []
+    for trafo in results.results:
+        data.append({
+            "Workflow": trafo.workflow_name,
+            "Module Config": trafo.modins,
+            "Transformatie": trafo.id,
+            "Volgorde": trafo.ord_nr,
+            "Beschrijving": trafo.desc
+        })
     
-    if results.results:
-        # Convert results to DataFrame for better display
-        data = []
-        for trafo in results.results:
-            data.append({
-                "Workflow": trafo.workflow_name,
-                "Module Config": trafo.modins,
-                "Transformation": trafo.id,
-                "Order": trafo.ord_nr,
-                "Description": trafo.desc
-            })
-        
-        df = pd.DataFrame(data)
-        
-        # Add filter options
-        col1, col2 = st.columns(2)
-        with col1:
-            if len(df["Module Config"].unique()) > 1:
-                module_filter = st.multiselect(
-                    "Filter by Module Config",
-                    options=sorted(df["Module Config"].unique()),
-                    default=[]
-                )
-            else:
-                module_filter = []
-                
-        with col2:
-            if len(df["Workflow"].unique()) > 1:
-                workflow_filter = st.multiselect(
-                    "Filter by Workflow",
-                    options=sorted(df["Workflow"].unique()),
-                    default=[]
-                )
-            else:
-                workflow_filter = []
-        
-        # Apply filters
-        filtered_df = df.copy()
-        if module_filter:
-            filtered_df = filtered_df[filtered_df["Module Config"].isin(module_filter)]
-        if workflow_filter:
-            filtered_df = filtered_df[filtered_df["Workflow"].isin(workflow_filter)]
-        
-        # Add sorting options
-        sort_column = st.selectbox("Sort by", df.columns.tolist(), key="transformation_sort")
-        sort_ascending = st.checkbox("Ascending order", True, key="transformation_sort_order")
-        
-        # Sort and display as table
-        filtered_df_sorted = filtered_df.sort_values(by=sort_column, ascending=sort_ascending)
-        st.dataframe(filtered_df_sorted, use_container_width=True)
-        
-        # Add metrics about the results
-        st.markdown(f"**Found {len(filtered_df)} transformations** (filtered from {len(df)} total results)")
-        
-        # Download option
-        csv = filtered_df.to_csv(index=False)
-        st.download_button(
-            label="Download filtered results as CSV",
-            data=csv,
-            file_name="transformation_search_results.csv",
-            mime="text/csv"
-        )
-        
-        # View details options
-        st.subheader("View Transformation Details")
-        
-        # Create a callback function to update the details view when selection changes
-        def on_transformation_select():
-            st.session_state.selected_transformation_id = st.session_state.transformation_selector
-            st.session_state.transformation_details_view_active = True
+    df = pd.DataFrame(data)
+    
+    # Basis filtering
+    col1, col2 = st.columns(2)
+    filters = {}
+    
+    with col1:
+        if len(df["Module Config"].unique()) > 1:
+            filters["Module Config"] = st.multiselect(
+                "Filter op Module Config",
+                options=sorted(df["Module Config"].unique()),
+                default=[]
+            )
             
-        # Use the on_change parameter to trigger the update when selection changes
-        selected_transformation = st.selectbox(
-            "Select a transformation to view details",
-            options=filtered_df["Transformation"].tolist(),
-            format_func=lambda x: f"{x} - {filtered_df.loc[filtered_df['Transformation'] == x, 'Description'].iloc[0]}",
-            key="transformation_selector",
-            on_change=on_transformation_select
-        )
+    with col2:
+        if len(df["Workflow"].unique()) > 1:
+            filters["Workflow"] = st.multiselect(
+                "Filter op Workflow",
+                options=sorted(df["Workflow"].unique()),
+                default=[]
+            )
+    
+    # Pas filters toe
+    filtered_df = df.copy()
+    for column, selected_values in filters.items():
+        if selected_values:
+            filtered_df = filtered_df[filtered_df[column].isin(selected_values)]
+    
+    # Sorteren
+    sort_column = st.selectbox("Sorteer op", df.columns.tolist(), key="transformation_sort")
+    sort_ascending = st.checkbox("Oplopende volgorde", True, key="transformation_sort_order")
+    filtered_df_sorted = filtered_df.sort_values(by=sort_column, ascending=sort_ascending)
+    
+    # Toon resultaten
+    st.dataframe(filtered_df_sorted, use_container_width=True)
+    st.markdown(f"**{len(filtered_df)} transformaties gevonden** (gefilterd van {len(df)} totale resultaten)")
+    
+    # Download optie
+    csv = filtered_df.to_csv(index=False)
+    st.download_button(
+        label="Download gefilterde resultaten als CSV",
+        data=csv,
+        file_name="transformatie_zoekresultaten.csv",
+        mime="text/csv"
+    )
+    
+    # Selecteer transformatie voor details
+    st.subheader("Bekijk Transformatie Details")
+    
+    def on_transformation_select():
+        st.session_state.selected_transformation_id = st.session_state.transformation_selector
+        st.session_state.transformation_details_view_active = True
         
-        # Remove the View Details button
-    else:
-        st.info("No transformations found matching your criteria.")
+    st.selectbox(
+        "Selecteer een transformatie om details te bekijken",
+        options=filtered_df["Transformatie"].tolist(),
+        format_func=lambda x: f"{x} - {filtered_df.loc[filtered_df['Transformatie'] == x, 'Beschrijving'].iloc[0]}",
+        key="transformation_selector",
+        on_change=on_transformation_select
+    )
 
 # Main content
-st.title("Search and Exploration")
+st.title("Zoeken en Verkennen")
 
 # Check if tools interface is available
 if "tools_interface" not in st.session_state:
-    st.error("Database connection not available. Please check your configuration.")
+    st.error("Database verbinding niet beschikbaar. Controleer uw configuratie.")
     render_footer()
     st.stop()
 
-# Use tabs for different search types
-tab1, tab2, tab3 = st.tabs(["Workflow Search", "Time Series Search", "Transformation Search"])
+# Helper function to fetch time series options
+def get_timeseries_options():
+    """Haal alle beschikbare parameter IDs, kwalificaties, module instanties en eindpuntbeschrijvingen op voor tijdreeksfilters"""
+    try:
+        # Query for parameter IDs
+        parameter_query = "SELECT DISTINCT parid FROM ts_sets ORDER BY parid"
+        parameter_ids = run_async_search(lambda: execute_custom_query(parameter_query))
+        parameter_ids = [row['parid'] for row in parameter_ids.results] if parameter_ids and hasattr(parameter_ids, 'results') else []
+        
+        # Query for qualifiers
+        qualifier_query = """
+            SELECT DISTINCT qualifiers 
+            FROM ts_sets 
+            WHERE qualifiers IS NOT NULL AND qualifiers != '' 
+            ORDER BY qualifiers
+        """
+        qualifiers = run_async_search(lambda: execute_custom_query(qualifier_query))
+        qualifiers = [row['qualifiers'] for row in qualifiers.results] if qualifiers and hasattr(qualifiers, 'results') else []
+        
+        # Query for module instances
+        module_query = "SELECT DISTINCT modins FROM ts_sets ORDER BY modins"
+        module_instances = run_async_search(lambda: execute_custom_query(module_query))
+        module_instances = [row['modins'] for row in module_instances.results] if module_instances and hasattr(module_instances, 'results') else []
+        
+        # Query for endpoint descriptions - ensure we get non-empty descriptions
+        endpoint_query = """
+            SELECT DISTINCT e.desc
+            FROM endpoints e
+            WHERE e.desc IS NOT NULL AND e.desc != ''
+            ORDER BY e.desc
+        """
+        endpoint_results = run_async_search(lambda: execute_custom_query(endpoint_query))
+        endpoint_descriptions = []
+        if endpoint_results and hasattr(endpoint_results, 'results'):
+            for row in endpoint_results.results:
+                if row['desc'] and row['desc'].strip() not in endpoint_descriptions:
+                    endpoint_descriptions.append(row['desc'].strip())
+        
+        return {
+            "parameter_ids": parameter_ids,
+            "qualifiers": qualifiers,
+            "module_instances": module_instances,
+            "endpoint_descriptions": endpoint_descriptions
+        }
+    except Exception as e:
+        st.error(f"Fout bij ophalen tijdreeksopties: {str(e)}")
+        return {"parameter_ids": [], "qualifiers": [], "module_instances": [], "endpoint_descriptions": []}
+
+def filter_timeseries_options(field, selected_parameter=None, selected_qualifier=None, selected_module=None, selected_endpoint=None):
+    """Haal gefilterde opties op voor een specifiek veld op basis van andere selecties"""
+    # Start met het opbouwen van de query
+    base_query = f"SELECT DISTINCT ts.{field} FROM ts_sets ts"
+    
+    # Voeg eindpunt controle toe als eindpuntfilter is geselecteerd
+    if selected_endpoint is not None:
+        # Controleer of selected_endpoint een boolean of string is
+        if isinstance(selected_endpoint, bool):
+            # Boolean geval - filter op eindpunt bestaan
+            if selected_endpoint:
+                # Toon alleen eindpunten (elk eindpunt)
+                base_query += " INNER JOIN endpoints e ON ts.id = e.tss_id"
+            else:
+                # Toon alleen niet-eindpunten
+                base_query += " LEFT JOIN endpoints e ON ts.id = e.tss_id WHERE e.tss_id IS NULL"
+        else:
+            # String geval - filter op eindpunt beschrijving
+            base_query += " INNER JOIN endpoints e ON ts.id = e.tss_id"
+    else:
+        # Geen eindpuntfilter - nog steeds joinen voor veldselectie indien nodig
+        if field == "endpoint_desc":
+            base_query += " LEFT JOIN endpoints e ON ts.id = e.tss_id"
+    
+    # Bouw de WHERE clausule
+    conditions = []
+    
+    # Voeg filtercondities toe op basis van selecties
+    if selected_parameter and field != "parid":
+        # Escape single quotes in de parameterwaarde door ze te verdubbelen (SQL standaard)
+        safe_param = selected_parameter.replace("'", "''") if selected_parameter else ""
+        conditions.append(f"ts.parid = '{safe_param}'")
+        
+    if selected_qualifier and field != "qualifiers":
+        # Escape single quotes in de kwalificatiewaarde
+        safe_qualifier = selected_qualifier.replace("'", "''") if selected_qualifier else ""
+        conditions.append(f"ts.qualifiers = '{safe_qualifier}'")
+        
+    if selected_module and field != "modins":
+        # Escape single quotes in de modulewaarde
+        safe_module = selected_module.replace("'", "''") if selected_module else ""
+        conditions.append(f"ts.modins = '{safe_module}'")
+        
+    # Voeg eindpuntbeschrijving conditie toe als geselecteerd en het is een string
+    if selected_endpoint is not None and isinstance(selected_endpoint, str):
+        # Escape single quotes in de eindpuntbeschrijving
+        safe_endpoint = selected_endpoint.replace("'", "''")
+        conditions.append(f"e.desc = '{safe_endpoint}'")
+    
+    # Voeg WHERE clausule toe als er condities zijn
+    if conditions:
+        # Als we al een WHERE clausule hebben van het niet-eindpunten filter, gebruik AND
+        if "WHERE" in base_query:
+            base_query += " AND " + " AND ".join(conditions)
+        else:
+            base_query += " WHERE " + " AND ".join(conditions)
+    
+    # Zorg voor niet-null waarden voor kwalificaties als dat het veld is
+    if field == "qualifiers":
+        # Als we al condities hebben, voeg AND toe, anders voeg WHERE toe
+        if conditions or "WHERE" in base_query:
+            base_query += " AND ts.qualifiers IS NOT NULL AND ts.qualifiers != ''"
+        else:
+            base_query += " WHERE ts.qualifiers IS NOT NULL AND ts.qualifiers != ''"
+    
+    # Voeg order by toe
+    base_query += f" ORDER BY ts.{field}"
+    
+    try:
+        results = run_async_search(lambda: execute_custom_query(base_query))
+        filtered_options = [row[field] for row in results.results] if results and hasattr(results, 'results') else []
+        return filtered_options
+    except Exception as e:
+        st.error(f"Fout bij filteren van opties: {str(e)}")
+        return []
+
+def display_time_series_search():
+    """Geef de tijdreeks-zoekinterface weer"""
+    st.subheader("Tijdreeks Zoeken")
+    
+    # Controleer op en verwerk eindpuntwijzigingsvlag
+    if "endpoint_changed" in st.session_state and st.session_state.endpoint_changed:
+        st.write("Filters bijgewerkt op basis van eindpuntselectie")
+        st.session_state.endpoint_changed = False
+    
+    # Initialiseer sessie-state voor filters als deze niet bestaat
+    if "ts_filter_selections" not in st.session_state:
+        st.session_state.ts_filter_selections = {
+            "parameter_id": None,
+            "qualifier": None,
+            "module_instance": None,
+            "endpoint": None
+        }
+        
+    # Initialiseer of update filteropties
+    if "ts_filter_options" not in st.session_state:
+        with st.spinner("Tijdreeksopties laden..."):
+            st.session_state.ts_filter_options = get_timeseries_options()
+            
+    # Definieer filter update callbacks
+    def on_parameter_change():
+        # Sla de nieuwe parameterwaarde op
+        st.session_state.ts_filter_selections["parameter_id"] = st.session_state.parameter_select
+        
+        # Update de gefilterde opties voor kwalificaties en module-instanties
+        if st.session_state.parameter_select:
+            st.session_state.filtered_qualifiers = filter_timeseries_options(
+                "qualifiers", 
+                selected_parameter=st.session_state.parameter_select,
+                selected_module=st.session_state.ts_filter_selections["module_instance"],
+                selected_endpoint=st.session_state.ts_filter_selections["endpoint"]
+            )
+            st.session_state.filtered_modules = filter_timeseries_options(
+                "modins",
+                selected_parameter=st.session_state.parameter_select,
+                selected_qualifier=st.session_state.ts_filter_selections["qualifier"],
+                selected_endpoint=st.session_state.ts_filter_selections["endpoint"]
+            )
+        else:
+            # Reset naar volledige lijsten als parameter is gewist
+            st.session_state.filtered_qualifiers = st.session_state.ts_filter_options["qualifiers"]
+            st.session_state.filtered_modules = st.session_state.ts_filter_options["module_instances"]
+            
+        # Zorg dat we kwalificatie- of moduleselecties niet verliezen als ze nog steeds geldige opties zijn
+        if (st.session_state.ts_filter_selections["qualifier"] and 
+            st.session_state.ts_filter_selections["qualifier"] not in st.session_state.filtered_qualifiers):
+            st.session_state.ts_filter_selections["qualifier"] = None
+            
+        if (st.session_state.ts_filter_selections["module_instance"] and
+            st.session_state.ts_filter_selections["module_instance"] not in st.session_state.filtered_modules):
+            st.session_state.ts_filter_selections["module_instance"] = None
+    
+    def on_qualifier_change():
+        # Sla de nieuwe kwalificatiewaarde op
+        st.session_state.ts_filter_selections["qualifier"] = st.session_state.qualifier_select
+        
+        # Update de gefilterde opties voor parameters en module-instanties
+        if st.session_state.qualifier_select:
+            st.session_state.filtered_parameters = filter_timeseries_options(
+                "parid",
+                selected_qualifier=st.session_state.qualifier_select,
+                selected_module=st.session_state.ts_filter_selections["module_instance"],
+                selected_endpoint=st.session_state.ts_filter_selections["endpoint"]
+            )
+            st.session_state.filtered_modules = filter_timeseries_options(
+                "modins",
+                selected_parameter=st.session_state.ts_filter_selections["parameter_id"],
+                selected_qualifier=st.session_state.qualifier_select,
+                selected_endpoint=st.session_state.ts_filter_selections["endpoint"]
+            )
+        else:
+            # Reset naar volledige lijsten als kwalificatie is gewist
+            st.session_state.filtered_parameters = st.session_state.ts_filter_options["parameter_ids"]
+            st.session_state.filtered_modules = st.session_state.ts_filter_options["module_instances"]
+            
+        # Zorg dat we parameter- of moduleselecties niet verliezen als ze nog steeds geldige opties zijn
+        if (st.session_state.ts_filter_selections["parameter_id"] and 
+            st.session_state.ts_filter_selections["parameter_id"] not in st.session_state.filtered_parameters):
+            st.session_state.ts_filter_selections["parameter_id"] = None
+            
+        if (st.session_state.ts_filter_selections["module_instance"] and
+            st.session_state.ts_filter_selections["module_instance"] not in st.session_state.filtered_modules):
+            st.session_state.ts_filter_selections["module_instance"] = None
+    
+    def on_module_change():
+        # Sla de nieuwe modulewaarde op
+        st.session_state.ts_filter_selections["module_instance"] = st.session_state.module_select
+        
+        # Update de gefilterde opties voor parameters en kwalificaties
+        if st.session_state.module_select:
+            st.session_state.filtered_parameters = filter_timeseries_options(
+                "parid",
+                selected_qualifier=st.session_state.ts_filter_selections["qualifier"],
+                selected_module=st.session_state.module_select,
+                selected_endpoint=st.session_state.ts_filter_selections["endpoint"]
+            )
+            st.session_state.filtered_qualifiers = filter_timeseries_options(
+                "qualifiers",
+                selected_parameter=st.session_state.ts_filter_selections["parameter_id"],
+                selected_module=st.session_state.module_select,
+                selected_endpoint=st.session_state.ts_filter_selections["endpoint"]
+            )
+        else:
+            # Reset naar volledige lijsten als module is gewist
+            st.session_state.filtered_parameters = st.session_state.ts_filter_options["parameter_ids"]
+            st.session_state.filtered_qualifiers = st.session_state.ts_filter_options["qualifiers"]
+            
+        # Zorg dat we parameter- of kwalificatieselecties niet verliezen als ze nog steeds geldige opties zijn
+        if (st.session_state.ts_filter_selections["parameter_id"] and 
+            st.session_state.ts_filter_selections["parameter_id"] not in st.session_state.filtered_parameters):
+            st.session_state.ts_filter_selections["parameter_id"] = None
+            
+        if (st.session_state.ts_filter_selections["qualifier"] and
+            st.session_state.ts_filter_selections["qualifier"] not in st.session_state.filtered_qualifiers):
+            st.session_state.ts_filter_selections["qualifier"] = None
+            
+    def on_endpoint_change():
+        # Sla de nieuwe eindpuntwaarde op
+        st.session_state.ts_filter_selections["endpoint"] = st.session_state.endpoint_select
+        
+        # Update de gefilterde opties voor alle andere velden
+        try:
+            st.session_state.filtered_parameters = filter_timeseries_options(
+                "parid",
+                selected_qualifier=st.session_state.ts_filter_selections["qualifier"],
+                selected_module=st.session_state.ts_filter_selections["module_instance"],
+                selected_endpoint=st.session_state.endpoint_select
+            )
+            
+            st.session_state.filtered_qualifiers = filter_timeseries_options(
+                "qualifiers",
+                selected_parameter=st.session_state.ts_filter_selections["parameter_id"],
+                selected_module=st.session_state.ts_filter_selections["module_instance"],
+                selected_endpoint=st.session_state.endpoint_select
+            )
+            
+            st.session_state.filtered_modules = filter_timeseries_options(
+                "modins",
+                selected_parameter=st.session_state.ts_filter_selections["parameter_id"],
+                selected_qualifier=st.session_state.ts_filter_selections["qualifier"],
+                selected_endpoint=st.session_state.endpoint_select
+            )
+        except Exception as e:
+            st.error(f"Fout bij bijwerken opties na eindpuntwijziging: {str(e)}")
+            
+        # Zorg dat we andere selecties niet verliezen als ze nog steeds geldig zijn
+        if (st.session_state.ts_filter_selections["parameter_id"] and 
+            st.session_state.ts_filter_selections["parameter_id"] not in st.session_state.filtered_parameters):
+            st.session_state.ts_filter_selections["parameter_id"] = None
+            
+        if (st.session_state.ts_filter_selections["qualifier"] and
+            st.session_state.ts_filter_selections["qualifier"] not in st.session_state.filtered_qualifiers):
+            st.session_state.ts_filter_selections["qualifier"] = None
+            
+        if (st.session_state.ts_filter_selections["module_instance"] and
+            st.session_state.ts_filter_selections["module_instance"] not in st.session_state.filtered_modules):
+            st.session_state.ts_filter_selections["module_instance"] = None
+            
+        # Zet vlaggen om rerun te triggeren nadat state is bijgewerkt
+        st.session_state.endpoint_changed = True
+    
+    # Stel gefilterde opties in als deze nog niet in sessie-state zitten
+    if "filtered_parameters" not in st.session_state:
+        st.session_state.filtered_parameters = st.session_state.ts_filter_options["parameter_ids"]
+    if "filtered_qualifiers" not in st.session_state:
+        st.session_state.filtered_qualifiers = st.session_state.ts_filter_options["qualifiers"]
+    if "filtered_modules" not in st.session_state:
+        st.session_state.filtered_modules = st.session_state.ts_filter_options["module_instances"]
+    
+    # Maak de filter UI
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        st.selectbox(
+            "Module Instantie ID",
+            options=[""] + st.session_state.filtered_modules,
+            key="module_select",
+            on_change=on_module_change,
+            index=0 if not st.session_state.ts_filter_selections["module_instance"] else 
+                  1 + st.session_state.filtered_modules.index(st.session_state.ts_filter_selections["module_instance"]),
+            help="Selecteer een module instantie uit de lijst"
+        )
+    
+    with col2:
+        st.selectbox(
+            "Parameter ID",
+            options=[""] + st.session_state.filtered_parameters,
+            key="parameter_select",
+            on_change=on_parameter_change,
+            index=0 if not st.session_state.ts_filter_selections["parameter_id"] else 
+                  1 + st.session_state.filtered_parameters.index(st.session_state.ts_filter_selections["parameter_id"]),
+            help="Selecteer een parameter ID uit de lijst"
+        ) 
+
+    with col3:
+        st.selectbox(
+            "Kwalificatie",
+            options=[""] + st.session_state.filtered_qualifiers,
+            key="qualifier_select",
+            on_change=on_qualifier_change,
+            index=0 if not st.session_state.ts_filter_selections["qualifier"] else 
+                  1 + st.session_state.filtered_qualifiers.index(st.session_state.ts_filter_selections["qualifier"]),
+            help="Selecteer een kwalificatie uit de lijst"
+        )
+        
+    with col4:
+        # Maak een dropdown met speciale opties en eindpuntbeschrijvingen 
+        if "endpoint_descriptions" in st.session_state.ts_filter_options:
+            # Voeg twee speciale opties toe: Alle (None) en Elk Eindpunt (True)
+            endpoint_options = ["Alle", "Elk Eindpunt"] + st.session_state.ts_filter_options["endpoint_descriptions"]
+            
+            # Zorg dat de eindpuntsleutel bestaat in ts_filter_selections
+            if "endpoint" not in st.session_state.ts_filter_selections:
+                st.session_state.ts_filter_selections["endpoint"] = None
+                
+            # Stel de index in voor het momenteel geselecteerde eindpunt
+            selected_index = 0  # Standaard naar "Alle"
+            current_endpoint = st.session_state.ts_filter_selections["endpoint"]
+            
+            # Bepaal de juiste index voor de dropdown
+            if current_endpoint is True:  # Boolean True - Elk Eindpunt
+                selected_index = 1
+            elif current_endpoint is not None and isinstance(current_endpoint, str):
+                # String beschrijving - specifiek eindpunt
+                try:
+                    # Tel 2 erbij op omdat "Alle" en "Elk Eindpunt" de eerste opties zijn
+                    selected_index = 2 + st.session_state.ts_filter_options["endpoint_descriptions"].index(current_endpoint)
+                except ValueError:
+                    # Als niet gevonden, standaard naar "Alle"
+                    selected_index = 0
+                
+            # Maak de selectbox voor eindpuntfiltering
+            st.selectbox(
+                "Eindpunt",
+                options=endpoint_options,
+                key="endpoint_select_display",
+                index=selected_index,
+                help="Filter op eindpuntstatus of -beschrijving"
+            )
+            
+            # Bewaar vorige waarde voor wijzigingsdetectie
+            if "prev_endpoint_display" not in st.session_state:
+                st.session_state.prev_endpoint_display = st.session_state.endpoint_select_display
+                
+            # Update sessie-state met het geselecteerde eindpunt
+            if st.session_state.endpoint_select_display != st.session_state.prev_endpoint_display:
+                # Vertaal de weergavewaarde naar de daadwerkelijke waarde
+                if st.session_state.endpoint_select_display == "Alle":
+                    st.session_state.endpoint_select = None
+                elif st.session_state.endpoint_select_display == "Elk Eindpunt":
+                    st.session_state.endpoint_select = True
+                else:
+                    # Een specifieke eindpuntbeschrijving
+                    st.session_state.endpoint_select = st.session_state.endpoint_select_display
+                
+                # Bewaar voor volgende wijziging
+                st.session_state.prev_endpoint_display = st.session_state.endpoint_select_display
+                
+                # Roep de on_change handler expliciet aan
+                if "prev_endpoint_select" not in st.session_state:
+                    st.session_state.prev_endpoint_select = st.session_state.endpoint_select
+                
+                if st.session_state.prev_endpoint_select != st.session_state.endpoint_select:
+                    st.session_state.prev_endpoint_select = st.session_state.endpoint_select
+                    on_endpoint_change()
+                    # Forceer rerun om UI bij te werken met nieuwe gefilterde opties
+                    st.rerun()
+        
+    search_button = st.button("Zoek Tijdreeksen", key="search_timeseries_button", use_container_width=True)
+    
+    if search_button:
+        parameter_id = st.session_state.ts_filter_selections["parameter_id"]
+        qualifier = st.session_state.ts_filter_selections["qualifier"]
+        module_instance = st.session_state.ts_filter_selections["module_instance"]
+        endpoint = st.session_state.ts_filter_selections["endpoint"]
+        
+        if parameter_id or qualifier or module_instance or endpoint is not None:
+            with st.spinner("Tijdreeksen zoeken..."):
+                try:
+                    results = run_async_search(
+                        st.session_state.tools_interface.search_timeseries,
+                        parameter_id=parameter_id,
+                        qualifier_pattern=qualifier,
+                        module_instance=module_instance,
+                        endpoint=endpoint
+                    )
+                    # Sla de zoekresultaten op in sessie-state
+                    st.session_state.timeseries_search_results = results
+                    display_timeseries_results(results)
+                except Exception as e:
+                    st.error(f"Fout bij zoeken tijdreeksen: {str(e)}")
+        else:
+            st.warning("Selecteer ten minste één zoekcriterium.")
+    # Toon opgeslagen resultaten als ze bestaan
+    elif "timeseries_search_results" in st.session_state:
+        display_timeseries_results(st.session_state.timeseries_search_results)
+    
+    # Toon tijdreeksdetails indien gevraagd
+    if "timeseries_details_view_active" in st.session_state and st.session_state.timeseries_details_view_active:
+        st.subheader(f"Tijdreeks Details voor ID: {st.session_state.selected_timeseries_id}")
+        
+        include_transformations = st.checkbox("Toon gerelateerde transformaties", value=True,
+                                            help="Toon transformaties die deze tijdreeks gebruiken")
+        
+        with st.spinner("Tijdreeks details laden..."):
+            try:
+                details = run_async_search(
+                    st.session_state.tools_interface.describe_timeseries,
+                    timeseries_id=st.session_state.selected_timeseries_id,
+                    include_transformations=include_transformations
+                )
+                st.markdown(details.markdown_content)
+                
+                # Knop om afhankelijkheden te visualiseren
+                if st.button("Visualiseer Tijdreeks", key="visualize_timeseries"):
+                    with st.spinner("Tijdreeksvisualisatie genereren..."):
+                        graph = run_async_search(
+                            st.session_state.tools_interface.visualize_graph,
+                            root_entity_id=st.session_state.selected_timeseries_id,
+                            root_entity_type="timeseries",
+                            max_depth=3,
+                            max_nodes=50,
+                            include_properties=True,
+                            direction="LR"
+                        )
+                        
+                        # Extraheer en verbeter het mermaid-diagram als het bestaat
+                        mermaid_match = re.search(r'```mermaid\n(.*?)```', graph.markdown_content, re.DOTALL)
+                        if mermaid_match:
+                            mermaid_code = mermaid_match.group(1)
+                            # Schat geschikte hoogte
+                            height = estimate_diagram_height(mermaid_code)
+                            render_mermaid(mermaid_code, height=height)
+                        else:
+                            st.markdown(graph.markdown_content)
+                
+                # Knop om afhankelijkheden te analyseren
+                if st.button("Analyseer Afhankelijkheden", key="analyze_timeseries_deps"):
+                    with st.spinner("Tijdreeks afhankelijkheden analyseren..."):
+                        deps = run_async_search(
+                            st.session_state.tools_interface.analyze_dependencies,
+                            entity_id=st.session_state.selected_timeseries_id,
+                            entity_type="timeseries"
+                        )
+                        
+                        # Extraheer en verbeter het mermaid-diagram als het bestaat
+                        mermaid_match = re.search(r'```mermaid\n(.*?)```', deps.markdown_content, re.DOTALL)
+                        if mermaid_match:
+                            # Toon tekstinhoud voor het diagram
+                            content_before = deps.markdown_content.split('```mermaid')[0]
+                            if content_before.strip():
+                                st.markdown(content_before)
+                            
+                            mermaid_code = mermaid_match.group(1)
+                            # Schat geschikte hoogte
+                            height = estimate_diagram_height(mermaid_code)
+                            render_mermaid(mermaid_code, height=height)
+                            
+                            # Toon eventuele tekstinhoud na het diagram
+                            content_after = deps.markdown_content.split('```')[2]
+                            if content_after.strip():
+                                st.markdown(content_after)
+                        else:
+                            st.markdown(deps.markdown_content)
+                
+                # Knop om details te sluiten
+                if st.button("Sluit Details", key="close_timeseries_details"):
+                    st.session_state.timeseries_details_view_active = False
+                    st.rerun()
+            except Exception as e:
+                st.error(f"Fout bij laden tijdreeksdetails: {str(e)}")
+
+    # Voeg een wis-knop toe voor tijdreeks zoekacties
+    if "timeseries_search_results" in st.session_state:
+        if st.button("Wis Resultaten", key="clear_timeseries_results"):
+            del st.session_state.timeseries_search_results
+            st.rerun()
+
+# Gebruik tabs voor verschillende zoektypes
+tab1, tab2, tab3 = st.tabs(["Tijdreeks Zoeken", "Workflow Zoeken", "Zoek Transformaties"])
 
 with tab1:
-    st.header("Search Workflows")
+    st.header("Zoek Tijdreeksen")
     
-    st.write("Enter search terms below to find workflows. Results will update automatically as you type.")
+    display_time_series_search()
+
+with tab2:
+    st.header("Zoek Workflows")
     
-    workflow_name = st.text_input("Workflow Name or Description", key="workflow_name", 
-                                  help="Enter a pattern to match workflow names or descriptions")
+    st.write("Voer zoektermen in om workflows te vinden. Resultaten worden automatisch bijgewerkt terwijl u typt.")
     
-    # Create a container for the results
+    workflow_name = st.text_input("Workflow Naam of Beschrijving", key="workflow_name", 
+                                  help="Voer een patroon in om workflow-namen of beschrijvingen te matchen")
+    
+    # Maak een container voor de resultaten
     workflow_results_container = st.container()
     
-    # Auto-search function that runs when inputs change
+    # Auto-zoekfunctie die wordt uitgevoerd wanneer invoer verandert
     def search_workflows():
         with workflow_results_container:
-            with st.spinner("Searching workflows..."):
+            with st.spinner("Workflows zoeken..."):
                 try:
-                    # Use '%' as the default pattern if empty
+                    # Gebruik '%' als standaardpatroon als leeg
                     pattern = workflow_name if workflow_name else "%"
                     results = run_async_search(
                         st.session_state.tools_interface.search_workflows,
@@ -481,90 +861,90 @@ with tab1:
                     )
                     
                     if results.results:
-                        # Convert results to DataFrame for better display
+                        # Converteer resultaten naar DataFrame voor betere weergave
                         data = []
                         for workflow in results.results:
                             data.append({
                                 "ID": workflow.id,
                                 "Workflow ID": workflow.wf_id,
-                                "Description": workflow.desc,
-                                "Module Config IDs": ', '.join(workflow.module_config_ids) if workflow.module_config_ids else 'None'
+                                "Beschrijving": workflow.desc,
+                                "Module Config IDs": ', '.join(workflow.module_config_ids) if workflow.module_config_ids else 'Geen'
                             })
                         
                         df = pd.DataFrame(data)
                         
-                        # Add sorting options
-                        sort_column = st.selectbox("Sort by", ["ID", "Workflow ID", "Description", "Module Config IDs"], key="workflow_sort")
-                        sort_ascending = st.checkbox("Ascending order", True, key="workflow_sort_order")
+                        # Voeg sorteeropties toe
+                        sort_column = st.selectbox("Sorteer op", ["ID", "Workflow ID", "Beschrijving", "Module Config IDs"], key="workflow_sort")
+                        sort_ascending = st.checkbox("Oplopende volgorde", True, key="workflow_sort_order")
                         
-                        # Sort and display as table
+                        # Sorteer en toon als tabel
                         df_sorted = df.sort_values(by=sort_column, ascending=sort_ascending)
                         st.dataframe(df_sorted, use_container_width=True)
                         
-                        # Download option
+                        # Download optie
                         csv = df.to_csv(index=False)
                         st.download_button(
-                            label="Download results as CSV",
+                            label="Download resultaten als CSV",
                             data=csv,
-                            file_name="workflow_search_results.csv",
+                            file_name="workflow_zoekresultaten.csv",
                             mime="text/csv"
                         )
                         
-                        # View details options
-                        st.subheader("View Workflow Details")
+                        # Bekijk details opties
+                        st.subheader("Bekijk Workflow Details")
                         
-                        # Create a callback function to update the details view when selection changes
+                        # Maak een callback functie om de detailweergave bij te werken wanneer selectie verandert
                         def on_workflow_select():
                             st.session_state.selected_workflow_id = st.session_state.workflow_selector
                             st.session_state.workflow_details_view_active = True
                             
-                        # Use the on_change parameter to trigger the update when selection changes
+                        # Gebruik de on_change parameter om update te triggeren wanneer selectie verandert
                         selected_workflow = st.selectbox(
-                            "Select a workflow to view details",
+                            "Selecteer een workflow om details te bekijken",
                             options=df["ID"].tolist(),
                             format_func=lambda x: f"{x} - {df.loc[df['ID'] == x, 'Workflow ID'].iloc[0]}",
                             key="workflow_selector",
                             on_change=on_workflow_select
                         )
                     else:
-                        st.info(f"No workflows found matching the pattern '{pattern}'.")
+                        st.info(f"Geen workflows gevonden die overeenkomen met het patroon '{pattern}'.")
                 except Exception as e:
-                    st.error(f"Error searching workflows: {str(e)}")
+                    st.error(f"Fout bij zoeken naar workflows: {str(e)}")
     
-    # Trigger search automatically whenever the input changes
+    # Trigger zoekactie automatisch wanneer de invoer verandert
     if "prev_workflow_name" not in st.session_state:
         st.session_state.prev_workflow_name = ""
     
-    # Check if the input has changed
+    # Controleer of de invoer is gewijzigd
     if workflow_name != st.session_state.prev_workflow_name:
         st.session_state.prev_workflow_name = workflow_name
         search_workflows()
     else:
         search_workflows()
     
-    # Display workflow details if requested
+    # Toon workflow details indien gevraagd
     if "workflow_details_view_active" in st.session_state and st.session_state.workflow_details_view_active:
         st.header("Workflow Details")
         
-        with st.spinner("Loading workflow details..."):
+        with st.spinner("Workflow details laden..."):
             try:
                 details = run_async_search(
                     st.session_state.tools_interface.get_workflow_details,
                     workflow_id=st.session_state.selected_workflow_id
                 )
                 
-                # Extract workflow details directly from the results
+                # Extraheer workflow details direct uit de resultaten
                 workflow = details.results[0]
                 
-                # Display the workflow structure directly with the diagram
-                st.markdown("### Workflow Structure")
+                # Toon de workflowstructuur direct met het diagram
+                st.markdown("### Workflow Structuur")
                 
                 try:
-                    # Create nodes for the flow diagram
+                    # Maak nodes voor het flowdiagram
                     nodes = []
                     edges = []
                     
-                    # 1. Add workflow node (starting node)
+                    # 1. Voeg workflow node toe (startnode)
                     workflow_node = StreamlitFlowNode(
                         id=str(workflow.id),
                         pos=(100, 100),
@@ -575,7 +955,7 @@ with tab1:
                     )
                     nodes.append(workflow_node)
                     
-                    # 2. Add module nodes
+                    # 2. Voeg module nodes toe
                     module_y = 50
                     module_y_step = 100
                     
@@ -583,10 +963,10 @@ with tab1:
                         module_id = f"module_{module_call.mic_id}"
                         module_name = module_call.modins
                         
-                        # Position modules vertically
+                        # Positioneer modules verticaal
                         y_pos = module_y + i * module_y_step
                         
-                        # Add module node
+                        # Voeg module node toe
                         module_node = StreamlitFlowNode(
                             id=module_id,
                             pos=(350, y_pos),
@@ -598,7 +978,7 @@ with tab1:
                         )
                         nodes.append(module_node)
                         
-                        # Add edge from workflow to module
+                        # Voeg rand toe van workflow naar module
                         edge = StreamlitFlowEdge(
                             id=f"edge_wf_to_{module_id}",
                             source=str(workflow.id),
@@ -608,14 +988,14 @@ with tab1:
                         )
                         edges.append(edge)
                     
-                    # Create a proper flow id
+                    # Maak een goede flow-id
                     flow_key = f"workflow_flow_{workflow.id}"
                     
-                    # Initialize the state if it doesn't exist in session state
+                    # Initialiseer de state als deze niet bestaat in sessie-state
                     if flow_key not in st.session_state:
                         st.session_state[flow_key] = StreamlitFlowState(nodes, edges)
                     
-                    # Capture the updated state with selected node/edge
+                    # Vang de bijgewerkte state op met geselecteerde node/edge
                     updated_state = streamlit_flow(
                         flow_key,
                         st.session_state[flow_key],
@@ -627,20 +1007,20 @@ with tab1:
                         get_edge_on_click=True
                     )
                     
-                    # Display which node was selected if any
+                    # Toon welke node was geselecteerd, indien van toepassing
                     if updated_state and updated_state.selected_id:
                         selected_node_id = updated_state.selected_id
-                        st.write(f"### Selected: {selected_node_id}")
+                        st.write(f"### Geselecteerd: {selected_node_id}")
                         
-                        # Check if the selected node is the workflow
+                        # Controleer of de geselecteerde node de workflow is
                         if selected_node_id == str(workflow.id):
                             st.write("#### Workflow Details")
                             st.write(f"**ID:** {workflow.id}")
-                            st.write(f"**Name:** {workflow.wf_id}")
-                            st.write(f"**Description:** {workflow.desc}")
-                            st.write(f"**Function:** {workflow.wffn}")
+                            st.write(f"**Naam:** {workflow.wf_id}")
+                            st.write(f"**Beschrijving:** {workflow.desc}")
+                            st.write(f"**Functie:** {workflow.wffn}")
                             
-                        # Check if the selected node is a module
+                        # Controleer of de geselecteerde node een module is
                         elif selected_node_id.startswith("module_"):
                             module_id = int(selected_node_id.replace("module_", ""))
                             module = next((m for m in workflow.module_calls if m.mic_id == module_id), None)
@@ -648,11 +1028,11 @@ with tab1:
                             if module:
                                 st.write("#### Module Details")
                                 st.write(f"**ID:** {module.mic_id}")
-                                st.write(f"**Name:** {module.modins}")
-                                st.write(f"**Order:** {module.ord_nr}")
+                                st.write(f"**Naam:** {module.modins}")
+                                st.write(f"**Volgorde:** {module.ord_nr}")
                                 
-                                # Directly show transformations for this module
-                                st.write("#### Transformations in this module:")
+                                # Toon direct transformaties voor deze module
+                                st.write("#### Transformaties in deze module:")
                                 try:
                                     trafo_results = run_async_search(
                                         st.session_state.tools_interface.execute_custom_query,
@@ -665,28 +1045,28 @@ with tab1:
                                     )
                                     
                                     if trafo_results.results:
-                                        # Create a dataframe for transformations
+                                        # Maak een dataframe voor transformaties
                                         trafo_data = []
                                         for trafo in trafo_results.results:
                                             trafo_data.append({
-                                                "Order": trafo['ord_nr'],
+                                                "Volgorde": trafo['ord_nr'],
                                                 "ID": trafo['id'],
-                                                "Description": trafo['desc']
+                                                "Beschrijving": trafo['desc']
                                             })
                                         
                                         if trafo_data:
                                             trafo_df = pd.DataFrame(trafo_data)
                                             st.dataframe(trafo_df, use_container_width=True)
                                         else:
-                                            st.write("No transformations found for this module.")
+                                            st.write("Geen transformaties gevonden voor deze module.")
                                     else:
-                                        st.write("No transformations found for this module.")
+                                        st.write("Geen transformaties gevonden voor deze module.")
                                 except Exception as e:
-                                    st.warning(f"Could not load transformations for module {module.modins}: {str(e)}")
+                                    st.warning(f"Kon transformaties voor module {module.modins} niet laden: {str(e)}")
                     
-                    # Remove extra buttons, only keep the Close Details button
-                    if st.button("Close Details", key="close_workflow_details"):
-                        # Clean up flow state when closing details
+                    # Verwijder extra knoppen, behoud alleen de Sluit Details knop
+                    if st.button("Sluit Details", key="close_workflow_details"):
+                        # Ruim flow state op bij het sluiten van details
                         flow_key = f"workflow_flow_{workflow.id}"
                         if flow_key in st.session_state:
                             del st.session_state[flow_key]
@@ -694,19 +1074,19 @@ with tab1:
                         st.session_state.workflow_details_view_active = False
                         st.rerun()
                 except Exception as e:
-                    st.error(f"Error creating flow diagram: {str(e)}")
-                    # Print complete traceback for debugging
+                    st.error(f"Fout bij maken flowdiagram: {str(e)}")
+                    # Print volledige traceback voor debugging
                     import traceback
                     st.code(traceback.format_exc())
                     
-                    # Fallback to a simple representation
-                    st.write("#### Module Calls and Transformations")
+                    # Terugvallen op eenvoudige weergave
+                    st.write("#### Module-aanroepen en Transformaties")
                     
                     for module_call in workflow.module_calls:
                         module_name = module_call.modins
                         st.write(f"**Module:** {module_name}")
                         
-                        # Get transformations for this module
+                        # Haal transformaties op voor deze module
                         try:
                             trafo_results = run_async_search(
                                 st.session_state.tools_interface.execute_custom_query,
@@ -719,173 +1099,50 @@ with tab1:
                             )
                             
                             if trafo_results.results:
-                                # Create a dataframe for transformations
+                                # Maak een dataframe voor transformaties
                                 trafo_data = []
                                 for trafo in trafo_results.results:
                                     trafo_data.append({
-                                        "Order": trafo['ord_nr'],
+                                        "Volgorde": trafo['ord_nr'],
                                         "ID": trafo['id'],
-                                        "Description": trafo['desc']
+                                        "Beschrijving": trafo['desc']
                                     })
                                 
                                 trafo_df = pd.DataFrame(trafo_data)
                                 st.dataframe(trafo_df, use_container_width=True)
                             else:
-                                st.write("No transformations found for this module.")
+                                st.write("Geen transformaties gevonden voor deze module.")
                                 
                         except Exception as e:
-                            st.warning(f"Could not load transformations for module {module_name}: {str(e)}")
+                            st.warning(f"Kon transformaties voor module {module_name} niet laden: {str(e)}")
             
             except Exception as e:
-                st.error(f"Error loading workflow details: {str(e)}")
-
-with tab2:
-    st.header("Search Time Series")
-    
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        parameter_id = st.text_input("Parameter ID", key="parameter_id",
-                                     help="Enter a parameter ID, e.g., 'H.m'")
-    
-    with col2:
-        qualifier_pattern = st.text_input("Qualifier Pattern", key="qualifier_pattern",
-                                        help="Enter a qualifier pattern, e.g., 'observed'")
-    
-    with col3:
-        module_instance = st.text_input("Module Instance", key="module_instance",
-                                       help="Enter a module instance name, e.g., 'ImportModule'")
-    
-    search_button = st.button("Search Time Series", key="search_timeseries_button", use_container_width=True)
-    
-    if search_button:
-        if parameter_id or qualifier_pattern or module_instance:
-            with st.spinner("Searching time series..."):
-                try:
-                    results = run_async_search(
-                        st.session_state.tools_interface.search_timeseries,
-                        parameter_id=parameter_id,
-                        qualifier_pattern=qualifier_pattern,
-                        module_instance=module_instance
-                    )
-                    # Store the search results in session state
-                    st.session_state.timeseries_search_results = results
-                    display_timeseries_results(results)
-                except Exception as e:
-                    st.error(f"Error searching time series: {str(e)}")
-        else:
-            st.warning("Please enter at least one search criterion.")
-    # Display stored results if they exist
-    elif "timeseries_search_results" in st.session_state:
-        display_timeseries_results(st.session_state.timeseries_search_results)
-    
-    # Display time series details if requested
-    if "timeseries_details_view_active" in st.session_state and st.session_state.timeseries_details_view_active:
-        st.subheader(f"Time Series Details for ID: {st.session_state.selected_timeseries_id}")
-        
-        include_transformations = st.checkbox("Include related transformations", value=True,
-                                            help="Show transformations that use this time series")
-        
-        with st.spinner("Loading time series details..."):
-            try:
-                details = run_async_search(
-                    st.session_state.tools_interface.describe_timeseries,
-                    timeseries_id=st.session_state.selected_timeseries_id,
-                    include_transformations=include_transformations
-                )
-                st.markdown(details.markdown_content)
-                
-                # Button to visualize dependencies
-                if st.button("Visualize Time Series", key="visualize_timeseries"):
-                    with st.spinner("Generating time series visualization..."):
-                        graph = run_async_search(
-                            st.session_state.tools_interface.visualize_graph,
-                            root_entity_id=st.session_state.selected_timeseries_id,
-                            root_entity_type="timeseries",
-                            max_depth=3,
-                            max_nodes=50,
-                            include_properties=True,
-                            direction="LR"
-                        )
-                        
-                        # Extract and enhance the mermaid diagram if it exists
-                        mermaid_match = re.search(r'```mermaid\n(.*?)```', graph.markdown_content, re.DOTALL)
-                        if mermaid_match:
-                            mermaid_code = mermaid_match.group(1)
-                            enhanced_code = enhance_mermaid_diagram(mermaid_code)
-                            # Estimate appropriate height
-                            height = estimate_diagram_height(enhanced_code)
-                            render_mermaid(enhanced_code, height=height)
-                        else:
-                            st.markdown(graph.markdown_content)
-                
-                # Button to analyze dependencies
-                if st.button("Analyze Dependencies", key="analyze_timeseries_deps"):
-                    with st.spinner("Analyzing time series dependencies..."):
-                        deps = run_async_search(
-                            st.session_state.tools_interface.analyze_dependencies,
-                            entity_id=st.session_state.selected_timeseries_id,
-                            entity_type="timeseries"
-                        )
-                        
-                        # Extract and enhance the mermaid diagram if it exists
-                        mermaid_match = re.search(r'```mermaid\n(.*?)```', deps.markdown_content, re.DOTALL)
-                        if mermaid_match:
-                            # Display text content before the diagram
-                            content_before = deps.markdown_content.split('```mermaid')[0]
-                            if content_before.strip():
-                                st.markdown(content_before)
-                            
-                            mermaid_code = mermaid_match.group(1)
-                            enhanced_code = enhance_mermaid_diagram(mermaid_code)
-                            # Estimate appropriate height
-                            height = estimate_diagram_height(enhanced_code)
-                            render_mermaid(enhanced_code, height=height)
-                            
-                            # Display any text content after the diagram
-                            content_after = deps.markdown_content.split('```')[2]
-                            if content_after.strip():
-                                st.markdown(content_after)
-                        else:
-                            st.markdown(deps.markdown_content)
-                
-                # Button to close details
-                if st.button("Close Details", key="close_timeseries_details"):
-                    st.session_state.timeseries_details_view_active = False
-                    st.rerun()
-            except Exception as e:
-                st.error(f"Error loading time series details: {str(e)}")
-
-    # Add a clear button for time series search
-    if "timeseries_search_results" in st.session_state:
-        if st.button("Clear Results", key="clear_timeseries_results"):
-            del st.session_state.timeseries_search_results
-            st.rerun()
+                st.error(f"Fout bij laden workflow details: {str(e)}")
 
 with tab3:
-    st.header("Search Transformations")
+    st.header("Zoek Transformaties")
     
     col1, col2 = st.columns(2)
     
     with col1:
-        transformation_desc = st.text_input("Transformation Description", key="transformation_desc",
-                                          help="Enter a description pattern, e.g., 'interpolation'")
+        transformation_desc = st.text_input("Transformatie Beschrijving", key="transformation_desc",
+                                          help="Voer een beschrijvingspatroon in, bijv. 'interpolatie'")
     
     col1, col2 = st.columns(2)
     
     with col1:
-        workflow_name_filter = st.text_input("Workflow Name (Optional)", key="workflow_name_filter",
-                                           help="Filter by workflow name")
+        workflow_name_filter = st.text_input("Workflow Naam (Optioneel)", key="workflow_name_filter",
+                                           help="Filter op workflow naam")
     
     with col2:
-        module_config_filter = st.text_input("Module Config (Optional)", key="module_config_filter",
-                                           help="Filter by module configuration")
+        module_config_filter = st.text_input("Module Config (Optioneel)", key="module_config_filter",
+                                           help="Filter op module configuratie")
     
-    search_button = st.button("Search Transformations", key="search_transformation_button", use_container_width=True)
+    search_button = st.button("Zoek Transformaties", key="search_transformation_button", use_container_width=True)
     
     if search_button:
         if transformation_desc:
-            with st.spinner("Searching transformations..."):
+            with st.spinner("Transformaties zoeken..."):
                 try:
                     results = run_async_search(
                         st.session_state.tools_interface.search_transformations,
@@ -893,44 +1150,44 @@ with tab3:
                         workflow_name=workflow_name_filter if workflow_name_filter else None,
                         module_config=module_config_filter if module_config_filter else None
                     )
-                    # Store the search results in session state
+                    # Sla de zoekresultaten op in sessie-state
                     st.session_state.transformation_search_results = results
                     display_transformation_results(results)
                 except Exception as e:
-                    st.error(f"Error searching transformations: {str(e)}")
+                    st.error(f"Fout bij zoeken naar transformaties: {str(e)}")
         else:
-            st.warning("Please enter a transformation description.")
-    # Display stored results if they exist
+            st.warning("Voer een transformatiebeschrijving in.")
+    # Toon opgeslagen resultaten als ze bestaan
     elif "transformation_search_results" in st.session_state:
         display_transformation_results(st.session_state.transformation_search_results)
     
-    # Display transformation details if requested
+    # Toon transformatie details indien gevraagd
     if "transformation_details_view_active" in st.session_state and st.session_state.transformation_details_view_active:
-        with st.spinner("Loading transformation details..."):
+        with st.spinner("Transformatie details laden..."):
             try:
                 details = run_async_search(
                     st.session_state.tools_interface.get_transformation_details,
                     transformation_id=st.session_state.selected_transformation_id
                 )
                 
-                # Instead of displaying raw markdown, create a more beautiful layout
+                # In plaats van ruwe markdown weer te geven, maak een mooiere lay-out
                 if details and details.results:
                     trafo = details.results[0]
                     
-                    # Use subheader instead of header to match "View Transformation Details" size
-                    st.subheader(f"Transformation {trafo.id}: {trafo.desc}")
+                    # Gebruik subheader in plaats van header om dezelfde grootte te behouden als "Bekijk Transformatie Details"
+                    st.subheader(f"Transformatie {trafo.id}: {trafo.desc}")
                     
-                    # Display basic information in a clean expander
-                    with st.expander("Basic Information", expanded=True):
+                    # Toon basisinformatie in een nette expander
+                    with st.expander("Basisinformatie", expanded=True):
                         col1, col2 = st.columns(2)
                         with col1:
-                            st.metric("Module Instance", trafo.modins)
-                            st.metric("Order Number", trafo.ord_nr)
+                            st.metric("Module Instantie", trafo.modins)
+                            st.metric("Volgnummer", trafo.ord_nr)
                         with col2:
                             st.metric("Module Config ID", trafo.mic_id)
-                            # Add link to view this module in the workflow
-                            if st.button("View in Workflow"):
-                                # Get the workflow ID from the API
+                            # Voeg link toe om deze module in de workflow te bekijken
+                            if st.button("Bekijk in Workflow"):
+                                # Haal de workflow ID op via de API
                                 workflow_query = run_async_search(
                                     st.session_state.tools_interface.execute_custom_query,
                                     query=f"""
@@ -946,37 +1203,37 @@ with tab3:
                                     st.session_state.workflow_details_view_active = True
                                     st.rerun()
                     
-                    # Move Transformation Flow up here, right after basic information
-                    # Display transformation flow visualization if available
+                    # Verplaats Transformation Flow hier naar boven, direct na basisinformatie
+                    # Toon transformatie flow visualisatie indien beschikbaar
                     visualize_section = [line for line in details.markdown_content.split('\n') if "Transformation Flow" in line]
                     if visualize_section:
-                        st.write("**Transformation Flow**")
-                        # Extract and display the mermaid diagram if it exists
+                        st.write("**Transformatie Flow**")
+                        # Extraheer en toon het mermaid-diagram indien aanwezig
                         mermaid_match = re.search(r'```mermaid\n(.*?)```', details.markdown_content, re.DOTALL)
                         if mermaid_match:
-                            # Use our custom mermaid renderer instead of st.markdown
+                            # Gebruik onze aangepaste mermaid-renderer in plaats van st.markdown
                             mermaid_code = mermaid_match.group(1)
-                            # Estimate appropriate height
+                            # Schat geschikte hoogte
                             height = estimate_diagram_height(mermaid_code)
                             render_mermaid(mermaid_code, height=height)
                         else:
-                            st.info("No flow diagram available for this transformation.")
+                            st.info("Geen flowdiagram beschikbaar voor deze transformatie.")
                     
-                    # Display time series connections with better formatting
-                    st.write("**Time Series Connections**")
+                    # Toon tijdreeks connecties met betere opmaak
+                    st.write("**Tijdreeks Verbindingen**")
                     
-                    # Display the input and output time series in tabs for better organization
+                    # Toon de input en output tijdreeksen in tabs voor betere organisatie
                     input_ts = [ts for ts in trafo.time_series_links if ts.inout == "in"]
                     output_ts = [ts for ts in trafo.time_series_links if ts.inout == "out"]
                     
-                    in_tab, out_tab = st.tabs(["Input Time Series", "Output Time Series"])
+                    in_tab, out_tab = st.tabs(["Input Tijdreeksen", "Output Tijdreeksen"])
                     
                     with in_tab:
                         if input_ts:
-                            # Create a DataFrame for better display
+                            # Maak een DataFrame voor betere weergave
                             input_data = []
                             for ts in input_ts:
-                                # Get the time series details
+                                # Haal de tijdreeks details op
                                 ts_details = run_async_search(
                                     st.session_state.tools_interface.execute_custom_query,
                                     query=f"""
@@ -991,27 +1248,27 @@ with tab3:
                                         "ID": ts_info["id"],
                                         "Module": ts_info["modins"],
                                         "Parameter": ts_info["parid"],
-                                        "Qualifiers": ts_info["qualifiers"] or "-"
+                                        "Kwalificaties": ts_info["qualifiers"] or "-"
                                     })
                             
                             if input_data:
                                 st.dataframe(pd.DataFrame(input_data), use_container_width=True)
                                 
-                                # Add button to view any input time series
+                                # Voeg knop toe om input tijdreeksdetails te bekijken
                                 if len(input_data) > 0:
-                                    if st.button("View Input Time Series Details"):
+                                    if st.button("Bekijk Input Tijdreeks Details"):
                                         st.session_state.selected_timeseries_id = input_data[0]["ID"]
                                         st.session_state.timeseries_details_view_active = True
                                         st.rerun()
                         else:
-                            st.info("This transformation doesn't have any input time series. This could be because it's a generation/creation transformation that produces new data without inputs, or inputs are defined through other mechanisms like fixed parameters or database queries.")
+                            st.info("Deze transformatie heeft geen input tijdreeksen. Dit kan zijn omdat het een generatie/creatie transformatie is die nieuwe data produceert zonder inputs, of omdat inputs via andere mechanismen zijn gedefinieerd zoals vaste parameters of database queries.")
                     
                     with out_tab:
                         if output_ts:
-                            # Create a DataFrame for better display
+                            # Maak een DataFrame voor betere weergave
                             output_data = []
                             for ts in output_ts:
-                                # Get the time series details
+                                # Haal de tijdreeks details op
                                 ts_details = run_async_search(
                                     st.session_state.tools_interface.execute_custom_query,
                                     query=f"""
@@ -1026,35 +1283,35 @@ with tab3:
                                         "ID": ts_info["id"],
                                         "Module": ts_info["modins"],
                                         "Parameter": ts_info["parid"],
-                                        "Qualifiers": ts_info["qualifiers"] or "-"
+                                        "Kwalificaties": ts_info["qualifiers"] or "-"
                                     })
                             
                             if output_data:
                                 st.dataframe(pd.DataFrame(output_data), use_container_width=True)
                                 
-                                # Add button to view any output time series
+                                # Voeg knop toe om output tijdreeksdetails te bekijken
                                 if len(output_data) > 0:
-                                    if st.button("View Output Time Series Details"):
+                                    if st.button("Bekijk Output Tijdreeks Details"):
                                         st.session_state.selected_timeseries_id = output_data[0]["ID"]
                                         st.session_state.timeseries_details_view_active = True
                                         st.rerun()
                         else:
-                            st.info("This transformation doesn't have any output time series. This is unusual but could happen for transformations that perform operations but don't produce time series outputs (e.g., database updates, file exports).")
+                            st.info("Deze transformatie heeft geen output tijdreeksen. Dit is ongebruikelijk maar kan voorkomen bij transformaties die operaties uitvoeren maar geen tijdreeksoutputs produceren (bijv. database updates, bestandsexports).")
                     
-                    # Add buttons for additional actions
+                    # Voeg knoppen toe voor aanvullende acties
                     col1, col2, col3 = st.columns(3)
                     
                     with col1:
-                        # Button to visualize dependencies
-                        if st.button("Visualize Transformation", key="visualize_transformation"):
-                            with st.spinner("Generating transformation visualization..."):
-                                # First get detailed information about the transformation
+                        # Knop om afhankelijkheden te visualiseren
+                        if st.button("Visualiseer Transformatie", key="visualize_transformation"):
+                            with st.spinner("Transformatie visualisatie genereren..."):
+                                # Haal eerst gedetailleerde informatie op over de transformatie
                                 t_details = run_async_search(
                                     st.session_state.tools_interface.get_transformation_details,
                                     transformation_id=st.session_state.selected_transformation_id
                                 )
                                 
-                                # Then create the visualization with additional parameters
+                                # Maak daarna de visualisatie met extra parameters
                                 graph = run_async_search(
                                     st.session_state.tools_interface.visualize_graph,
                                     root_entity_id=st.session_state.selected_transformation_id,
@@ -1064,43 +1321,38 @@ with tab3:
                                     include_properties=True,
                                     direction="LR"
                                 )
-                                # Extract the mermaid diagram
+                                # Extraheer het mermaid-diagram
                                 mermaid_match = re.search(r'```mermaid\n(.*?)```', graph.markdown_content, re.DOTALL)
                                 if mermaid_match:
                                     mermaid_code = mermaid_match.group(1)
-                                    
-                                    # Enhance and render the diagram in one step
-                                    enhanced_code = enhance_mermaid_diagram(mermaid_code, t_details)
-                                    height = estimate_diagram_height(enhanced_code)
-                                    render_mermaid(enhanced_code, height=height)
+                                    height = estimate_diagram_height(mermaid_code)
+                                    render_mermaid(mermaid_code, height=height)
                                 else:
                                     st.markdown(graph.markdown_content)
                     
                     with col2:
-                        # Button to analyze dependencies
-                        if st.button("Analyze Dependencies", key="analyze_transformation_deps"):
-                            with st.spinner("Analyzing transformation dependencies..."):
+                        # Knop om afhankelijkheden te analyseren
+                        if st.button("Analyseer Afhankelijkheden", key="analyze_transformation_deps"):
+                            with st.spinner("Transformatie afhankelijkheden analyseren..."):
                                 deps = run_async_search(
                                     st.session_state.tools_interface.analyze_dependencies,
                                     entity_id=st.session_state.selected_transformation_id,
                                     entity_type="transformation"
                                 )
-                                # Extract and render the mermaid diagram if it exists
+                                # Extraheer en render het mermaid-diagram indien aanwezig
                                 mermaid_match = re.search(r'```mermaid\n(.*?)```', deps.markdown_content, re.DOTALL)
                                 if mermaid_match:
-                                    # Display text content before the diagram
+                                    # Toon tekstinhoud voor het diagram
                                     content_before = deps.markdown_content.split('```mermaid')[0]
                                     if content_before.strip():
                                         st.markdown(content_before)
                                     
                                     mermaid_code = mermaid_match.group(1)
-                                    # Use the enhanced mermaid diagram function
-                                    enhanced_code = enhance_mermaid_diagram(mermaid_code)
-                                    # Estimate appropriate height
-                                    height = estimate_diagram_height(enhanced_code)
-                                    render_mermaid(enhanced_code, height=height)
+                                    # Schat geschikte hoogte
+                                    height = estimate_diagram_height(mermaid_code)
+                                    render_mermaid(mermaid_code, height=height)
                                     
-                                    # Display any text content after the diagram
+                                    # Toon eventuele tekstinhoud na het diagram
                                     content_after = deps.markdown_content.split('```')[2]
                                     if content_after.strip():
                                         st.markdown(content_after)
@@ -1108,18 +1360,18 @@ with tab3:
                                     st.markdown(deps.markdown_content)
                     
                     with col3:
-                        # Button to close details
-                        if st.button("Close Details", key="close_transformation_details"):
+                        # Knop om details te sluiten
+                        if st.button("Sluit Details", key="close_transformation_details"):
                             st.session_state.transformation_details_view_active = False
                             st.rerun()
                 else:
-                    st.error("No details available for this transformation.")
+                    st.error("Geen details beschikbaar voor deze transformatie.")
             except Exception as e:
-                st.error(f"Error loading transformation details: {str(e)}")
+                st.error(f"Fout bij laden transformatie details: {str(e)}")
 
-    # Add a clear button for transformation search
+    # Voeg een wis-knop toe voor transformatie zoekacties
     if "transformation_search_results" in st.session_state:
-        if st.button("Clear Results", key="clear_transformation_results"):
+        if st.button("Wis Resultaten", key="clear_transformation_results"):
             del st.session_state.transformation_search_results
             st.rerun()
 

@@ -287,7 +287,7 @@ async def get_workflow_details(ctx: RunContext[Deps], input: WorkflowDetailsInpu
 @log_tool_call
 async def search_timeseries(ctx: RunContext[Deps], input: TimeSeriesSearchInput) -> TimeSeriesSearchOutput:
     """
-    Search for time series sets by parameter, qualifier, or module.
+    Search for time series sets by parameter, qualifier, module, or endpoint status.
     
     Args:
         ctx: RunContext with database connection
@@ -296,29 +296,68 @@ async def search_timeseries(ctx: RunContext[Deps], input: TimeSeriesSearchInput)
     Returns:
         TimeSeriesSearchOutput: Matching time series sets with formatted markdown content
     """
-    conditions = []
-    
-    if input.parameter_id:
-        conditions.append(f"parid LIKE '%{input.parameter_id}%'")
-    
-    if input.qualifier_pattern:
-        conditions.append(f"qualifiers LIKE '%{input.qualifier_pattern}%'")
-    
-    if input.module_instance:
-        conditions.append(f"modins LIKE '%{input.module_instance}%'")
-    
-    if not conditions:
-        logger.warning("search_timeseries called without any search criteria")
-        raise ModelRetry("At least one search criterion is required")
-    
-    where_clause = " AND ".join(conditions)
-    
-    query = f"""
-    SELECT id, modins, vtype, parid, qualifiers, tstype, timess
-    FROM ts_sets
-    WHERE {where_clause}
-    ORDER BY id
-    """
+    # Check if we're filtering by endpoint status
+    if input.endpoint is not None:
+        # Create a more specific query that joins with the endpoints table
+        query = """
+            SELECT ts.id, ts.modins, ts.vtype, ts.parid, ts.qualifiers, ts.tstype, ts.timess,
+                   CASE WHEN e.tss_id IS NOT NULL THEN 1 ELSE 0 END as is_endpoint
+            FROM ts_sets ts
+        """
+        
+        conditions = []
+        
+        # Join with endpoints table based on filter type
+        if input.endpoint:
+            query += " INNER JOIN endpoints e ON ts.id = e.tss_id"
+        else:
+            query += " LEFT JOIN endpoints e ON ts.id = e.tss_id WHERE e.tss_id IS NULL"
+            
+        # Add other conditions
+        if input.parameter_id:
+            conditions.append(f"ts.parid LIKE '%{input.parameter_id}%'")
+            
+        if input.qualifier_pattern:
+            conditions.append(f"ts.qualifiers LIKE '%{input.qualifier_pattern}%'")
+            
+        if input.module_instance:
+            conditions.append(f"ts.modins LIKE '%{input.module_instance}%'")
+            
+        # Add other conditions to the query
+        if conditions:
+            if not input.endpoint or input.endpoint:
+                query += " WHERE " + " AND ".join(conditions)
+            else:
+                query += " AND " + " AND ".join(conditions)
+                
+        query += " ORDER BY ts.id"
+    else:
+        # Use the standard approach for non-endpoint filtering
+        conditions = []
+        
+        if input.parameter_id:
+            conditions.append(f"parid LIKE '%{input.parameter_id}%'")
+        
+        if input.qualifier_pattern:
+            conditions.append(f"qualifiers LIKE '%{input.qualifier_pattern}%'")
+        
+        if input.module_instance:
+            conditions.append(f"modins LIKE '%{input.module_instance}%'")
+        
+        if not conditions:
+            logger.warning("search_timeseries called without any search criteria")
+            raise ModelRetry("At least one search criterion is required")
+        
+        where_clause = " AND ".join(conditions)
+        
+        query = f"""
+        SELECT ts.id, ts.modins, ts.vtype, ts.parid, ts.qualifiers, ts.tstype, ts.timess,
+               CASE WHEN e.tss_id IS NOT NULL THEN 1 ELSE 0 END as is_endpoint
+        FROM ts_sets ts
+        LEFT JOIN endpoints e ON ts.id = e.tss_id
+        WHERE {where_clause}
+        ORDER BY ts.id
+        """
     
     result = await execute_query(ctx, SQLQueryInput(query=query))
     
@@ -327,6 +366,7 @@ async def search_timeseries(ctx: RunContext[Deps], input: TimeSeriesSearchInput)
     for row in result.results:
         # Create description using the standard template
         description = f"{row['modins']}|{row['vtype']}|{row['parid']}|{row['qualifiers']}|{row['tstype']}|{row['timess']}"
+        is_endpoint = bool(row.get('is_endpoint', False))
         
         time_series = TimeSeriesSearchResult(
             id=row['id'],
@@ -336,7 +376,8 @@ async def search_timeseries(ctx: RunContext[Deps], input: TimeSeriesSearchInput)
             qualifiers=row['qualifiers'],
             tstype=row['tstype'],
             timess=row['timess'],
-            description=description
+            description=description,
+            endpoint=is_endpoint
         )
         time_series_results.append(time_series)
     
@@ -344,12 +385,13 @@ async def search_timeseries(ctx: RunContext[Deps], input: TimeSeriesSearchInput)
     markdown_content = f"""## Time Series Search Results
 Found {len(time_series_results)} time series matching the criteria.
 
-| ID | Module Instance | Type | Parameter | Qualifiers | Value Type | Time Step |
-|----|----------------|------|-----------|------------|------------|-----------|
+| ID | Module Instance | Type | Parameter | Qualifiers | Value Type | Time Step | Endpoint |
+|----|----------------|------|-----------|------------|------------|-----------|----------|
 """
     
     for ts in time_series_results:
-        markdown_content += f"| {ts.id} | {ts.modins} | {ts.tstype} | {ts.parid} | {ts.qualifiers} | {ts.vtype} | {ts.timess} |\n"
+        is_endpoint = "✓" if ts.endpoint else ""
+        markdown_content += f"| {ts.id} | {ts.modins} | {ts.tstype} | {ts.parid} | {ts.qualifiers} | {ts.vtype} | {ts.timess} | {is_endpoint} |\n"
     
     return TimeSeriesSearchOutput(
         results=time_series_results,
@@ -1035,6 +1077,52 @@ async def analyze_dead_points(ctx: RunContext[Deps], input: dict = None) -> Dead
         dead_parameters = set(dp.parid for dp in dead_points)
         dead_qualifiers = set(dp.qualifiers for dp in dead_points)
         
+        # Query ALL time series sets to determine which ones are exclusively used by dead points
+        all_timeseries_query = """
+        SELECT DISTINCT modins, parid, qualifiers
+        FROM ts_sets
+        """
+        
+        all_timeseries_result = await execute_query(ctx, SQLQueryInput(query=all_timeseries_query))
+        
+        # Extract all module instances, parameters, and qualifiers from active time series
+        all_module_instances = set(row['modins'] for row in all_timeseries_result.results)
+        all_parameters = set(row['parid'] for row in all_timeseries_result.results)
+        all_qualifiers = set(row['qualifiers'] for row in all_timeseries_result.results)
+        
+        # Filter out the module instances, parameters, and qualifiers that are also used by active time series
+        active_timeseries_query = """
+        SELECT DISTINCT ts.modins, ts.parid, ts.qualifiers
+        FROM ts_sets ts
+        WHERE ts.id IN (
+            -- TSS used as inputs for transformations
+            SELECT DISTINCT tss_id 
+            FROM links 
+            WHERE inout = 'in'
+        )
+        OR ts.id IN (
+            -- TSS marked as endpoints
+            SELECT tss_id 
+            FROM endpoints
+        )
+        """
+        
+        active_timeseries_result = await execute_query(ctx, SQLQueryInput(query=active_timeseries_query))
+        
+        active_module_instances = set(row['modins'] for row in active_timeseries_result.results)
+        active_parameters = set(row['parid'] for row in active_timeseries_result.results)
+        active_qualifiers = set(row['qualifiers'] for row in active_timeseries_result.results)
+        
+        # Now identify the ones that are exclusively in dead points
+        exclusively_dead_module_instances = dead_module_instances - active_module_instances
+        exclusively_dead_parameters = dead_parameters - active_parameters
+        exclusively_dead_qualifiers = dead_qualifiers - active_qualifiers
+        
+        # Filter module_summary to only include exclusively dead modules
+        exclusively_module_summary = [
+            ms for ms in module_summary if ms.module in exclusively_dead_module_instances
+        ]
+        
         # Create markdown content
         markdown_content = f"""## Dead Points Analysis
 Found {len(dead_points)} dead points across {len(module_counts)} modules.
@@ -1054,44 +1142,64 @@ Found {len(dead_points)} dead points across {len(module_counts)} modules.
                 ts_desc = format_timeseries_description(dp.dict())
                 markdown_content += f"| {dp.id} | {ts_desc} | - | - | - |\n"
         
-        markdown_content += "\n### Module Instances That Can Be Removed\n"
-        markdown_content += "| Module Instance | Dead Points Count |\n"
-        markdown_content += "|----------------|-------------------|\n"
-        for ms in module_summary:
-            markdown_content += f"| {ms.module} | {ms.count} |\n"
+        if exclusively_dead_module_instances:
+            markdown_content += "\n### Module Instances That Can Be Removed\n"
+            markdown_content += "| Module Instance | Dead Points Count |\n"
+            markdown_content += "|----------------|-------------------|\n"
+            for ms in exclusively_module_summary:
+                markdown_content += f"| {ms.module} | {ms.count} |\n"
+        else:
+            markdown_content += "\n### Module Instances That Can Be Removed\n"
+            markdown_content += "No module instances can be safely removed - all are used by active time series.\n"
         
-        markdown_content += "\n### Parameters That Can Be Removed\n"
-        markdown_content += "| Parameter |\n"
-        markdown_content += "|-----------|\n"
-        for param in sorted(dead_parameters):
-            markdown_content += f"| {param} |\n"
+        if exclusively_dead_parameters:
+            markdown_content += "\n### Parameters That Can Be Removed\n"
+            markdown_content += "| Parameter |\n"
+            markdown_content += "|-----------|\n"
+            for param in sorted(exclusively_dead_parameters):
+                markdown_content += f"| {param} |\n"
+        else:
+            markdown_content += "\n### Parameters That Can Be Removed\n"
+            markdown_content += "No parameters can be safely removed - all are used by active time series.\n"
         
-        markdown_content += "\n### Qualifiers That Can Be Removed\n"
-        markdown_content += "| Qualifier |\n"
-        markdown_content += "|-----------|\n"
-        for qual in sorted(dead_qualifiers):
-            markdown_content += f"| {qual} |\n"
+        if exclusively_dead_qualifiers:
+            markdown_content += "\n### Qualifiers That Can Be Removed\n"
+            markdown_content += "| Qualifier |\n"
+            markdown_content += "|-----------|\n"
+            for qual in sorted(exclusively_dead_qualifiers):
+                markdown_content += f"| {qual} |\n"
+        else:
+            markdown_content += "\n### Qualifiers That Can Be Removed\n"
+            markdown_content += "No qualifiers can be safely removed - all are used by active time series.\n"
         
-        # Add recommendations
-        markdown_content += "\n### Recommendations\n"
+        # Update recommendations
         recommendations = [
             "Review the identified dead points to determine if they are needed",
             "Consider removing unused time series sets to simplify configuration",
             "Check if any dead points should be marked as endpoints",
-            "Verify if transformations producing these time series are working as expected",
-            f"Consider removing {len(dead_module_instances)} unused module instances",
-            f"Consider removing {len(dead_parameters)} unused parameters",
-            f"Consider removing {len(dead_qualifiers)} unused qualifiers"
+            "Verify if transformations producing these time series are working as expected"
         ]
+        
+        if exclusively_dead_module_instances:
+            recommendations.append(f"Consider removing {len(exclusively_dead_module_instances)} unused module instances that are EXCLUSIVELY used by dead points")
+        
+        if exclusively_dead_parameters:
+            recommendations.append(f"Consider removing {len(exclusively_dead_parameters)} unused parameters that are EXCLUSIVELY used by dead points")
+            
+        if exclusively_dead_qualifiers:
+            recommendations.append(f"Consider removing {len(exclusively_dead_qualifiers)} unused qualifiers that are EXCLUSIVELY used by dead points")
+        
+        # Add recommendations
+        markdown_content += "\n### Recommendations\n"
         for rec in recommendations:
             markdown_content += f"- {rec}\n"
         
         return DeadPointsAnalysisOutput(
             count=len(dead_points),
             dead_points=dead_points,
-            module_summary=module_summary,
-            unique_modules=len(module_counts),
-            parameters_affected=len(set(dp.parid for dp in dead_points)),
+            module_summary=exclusively_module_summary,  # Only include exclusively dead modules
+            unique_modules=len(exclusively_dead_module_instances),  # Only count exclusively dead modules
+            parameters_affected=len(exclusively_dead_parameters),  # Only count exclusively dead parameters
             producers=producers,
             recommendations=recommendations,
             markdown_content=markdown_content

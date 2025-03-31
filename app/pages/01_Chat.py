@@ -1,7 +1,7 @@
 """
-Chat Interface page for FEWS Network Visualization.
+Chat Interface pagina voor FEWS Netwerkvisualisatie.
 
-This page provides a chat interface for asking questions about your FEWS configuration.
+Deze pagina biedt een chat-interface voor het stellen van vragen over uw FEWS-configuratie.
 """
 import streamlit as st
 from pathlib import Path
@@ -19,7 +19,7 @@ from app.chat_interface import render_chat_interface
 
 # Set page configuration
 st.set_page_config(
-    page_title="Chat - FEWS Network Visualization",
+    page_title="Chat - FEWS Netwerkvisualisatie",
     page_icon="💬",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -30,7 +30,7 @@ config = load_config()
 
 # Render header
 render_header(
-    title=config.get("app_title", "FEWS Network Visualization"),
+    title=config.get("app_title", "FEWS Netwerkvisualisatie"),
     version=config.get("app_version", "0.2.0")
 )
 
@@ -41,14 +41,14 @@ sidebar_container = render_sidebar(page_title="Chat")
 st.title("Chat Interface")
 
 st.markdown("""
-Ask questions about your FEWS configuration in natural language.
+Stel vragen over uw FEWS-configuratie in natuurlijke taal.
 
-Example questions you can ask:
-- What workflows are in my configuration?
-- How many transformations are in workflow XYZ?
-- What time series are produced by module ABC?
-- Find transformations related to parameter H.m
-- Show me the dependencies for time series 12345
+Voorbeeldvragen die u kunt stellen:
+- Welke workflows zitten in mijn configuratie?
+- Hoeveel transformaties zijn er in workflow XYZ?
+- Welke tijdreeksen worden geproduceerd door module ABC?
+- Vind transformaties gerelateerd aan parameter H.m
+- Toon me de afhankelijkheden voor tijdreeks 12345
 """)
 
 # Render the chat interface

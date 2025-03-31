@@ -5,9 +5,10 @@ This module defines the agent that can answer questions about FEWS configuration
 """
 
 import os
-from pydantic_ai import Agent, Tool, CallToolsNode
+from pydantic_ai import Agent, Tool
 from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.providers.openai import OpenAIProvider
+from pydantic_ai.agent import AgentRunResult
 
 from .models import Deps
 
@@ -31,6 +32,9 @@ from .tools import (
 from .utils import connect_to_database
 
 from .schema_utils import extract_db_schema_as_dict, generate_llm_context
+from .models import AgentResponse
+
+import re
 
 class FEWSConfigAgent:
     """
@@ -72,7 +76,6 @@ class FEWSConfigAgent:
         self.base_url = base_url
         self.agent = None
         self.db_connection = None
-        self.last_tool_call = None  # Store the latest tool call's result
         
         # Set up logging
         setup_logging(log_level=log_level, log_dir=log_dir)
@@ -136,34 +139,28 @@ class FEWSConfigAgent:
         # Set schema in deps for tools to access
         deps.schema = schema
         
-        # Create a comprehensive system prompt with the schema information
+        # Create a simplified system prompt with the schema information
         system_prompt = (
-            "You are the FEWS Configuration Agent, specialized in analyzing FEWS (Flood Early Warning System) configurations. "
-            "Your expertise lies in understanding and explaining the relationships between time series, transformations, and workflows in FEWS configurations.\n\n"
-            "You have access to the complete database schema including:\n"
-            "1. All database tables and their columns\n"
-            "2. Relationships between tables (foreign keys, joins)\n"
-            "3. Sample data to understand the data structure\n\n"
-            f"Here's the detailed schema:\n{llm_context}\n\n"
-            "Your primary capabilities include:\n"
-            "1. Analyzing time series properties and their relationships\n"
-            "2. Tracing transformations and their input/output connections\n"
-            "3. Understanding workflow structures and module configurations\n"
-            "4. Identifying dependencies between different FEWS components\n"
-            "5. Visualizing data flows and relationships\n\n"
-            "When analyzing configurations:\n"
-            "1. Focus on the relationships between time series and transformations\n"
-            "2. Highlight workflow structures and module configurations\n"
-            "3. Identify potential issues like dead points or circular dependencies\n"
-            "4. Use diagrams to show data flows and relationships\n\n"
-            "Important Response Format Rules:\n"
-            "1. ALWAYS use the markdown tables and mermaid diagrams provided by the tools in their markdown_content\n"
-            "2. DO NOT create your own tables or diagrams - use the ones from the tools\n"
-            "3. When a tool returns markdown_content, include it directly in your response\n"
-            "4. If you need to explain the data, do so before or after the tables/diagrams\n"
-            "5. Keep your explanations concise and focused on interpreting the provided data\n\n"
-            "Always use the available tools to gather accurate information before providing analysis.\n"
-            "For each tool you use, explain your reasoning with 'Reasoning: ' followed by your explanation."
+            "You are the FEWS Configuration Agent for analyzing Flood Early Warning System configurations. "
+            f"You have access to the database schema:\n{llm_context}\n\n"
+            "Your capabilities include analyzing timeseriessets, transformations, workflows, and dependencies in FEWS. "
+            "Common questions are about data flows of time series sets (even when mentioned as time series, it is a time series set). "
+            "Time series sets shall be formatted using using a standard template, that returns by the description argument of the describe_timeseries tool (model TimeSeriesProperties). "
+            "This template is: {modins}•{vtype}•{parid}•{qualifiers (if any)}•{tstype}•{timess}\n\n"
+            "Time series sets are the input and output of transformations. "
+            "To trace a data flow from an endpoint inspect which transformations has it as an output. "
+            "Then check which time series sets are defined as an input for these transformations, "
+            "and check which transformations has these time series sets defined as input. "
+            "Continue this process until you have traced the data flow to the initial imports, "
+            "until the corresponding time series sets are not an output of any transformations. "
+            "This way you can trace the data flow of time series sets backwards and forwards."
+            "You can visualize data flows only using mermaid diagram syntax.\n\n"
+            "Response Format:\n"
+            "- Use available tools to gather accurate information first\n"
+            "- Include explanatory text in markdown format\n"
+            "- Add tables when appropriate (markdown format)\n"
+            "- Include mermaid diagrams when visualizing relationships\n\n"
+            "Always structure your response with text first, followed by tables and diagrams if needed."
         )
             
         logger.info("Using comprehensive schema from schema_utils")
@@ -212,7 +209,8 @@ class FEWSConfigAgent:
             model=model,
             tools=tools,
             system_prompt=system_prompt,
-            deps_type=Deps
+            deps_type=Deps,
+            result_type=AgentResponse
         )
         
         # Store deps for later use when calling the agent
@@ -220,7 +218,7 @@ class FEWSConfigAgent:
         
         return self
     
-    async def ask(self, question: str) -> str:
+    async def ask(self, question: str) -> "AgentRunResult":
         """
         Ask the FEWS Configuration Agent a question.
         
@@ -228,7 +226,7 @@ class FEWSConfigAgent:
             question: The question to ask
             
         Returns:
-            str: The agent's response
+            AgentRunResult: The agent's response object containing AgentResponse in its data property
         """
         if self.agent is None:
             self.connect()
@@ -238,54 +236,8 @@ class FEWSConfigAgent:
         try:
             # Use basic run method
             response = await self.agent.run(question, deps=self.deps)
-            
-            # Properly extract the content based on the response type
-            if hasattr(response, 'content'):
-                return response.content
-            elif hasattr(response, 'data'):
-                return response.data
-            elif isinstance(response, dict) and 'data' in response:
-                return response['data']
-            else:
-                # Fall back to string conversion if we can't extract content otherwise
-                return str(response)
+            return response
                         
         except Exception as e:
             logger.error(f"Error asking agent: {str(e)}")
             raise
-
-
-async def run_fews_agent(
-    db_path: str,
-    question: str,
-    model: str = None,
-    api_key: str = None,
-    base_url: str = None,
-    log_level: str = "INFO",
-    log_dir: str = None
-) -> str:
-    """
-    Run the FEWS Configuration Agent on a question.
-    
-    Args:
-        db_path: Path to the SQLite database containing FEWS configuration data
-        question: The question to ask the agent
-        model: Optional model to use (defaults to GPT-4)
-        api_key: Optional API key (will use OPENROUTER_API_KEY env var if not provided)
-        base_url: Optional base URL (will use OPENROUTER_BASE_URL env var if not provided)
-        log_level: Logging level (default is INFO)
-        log_dir: Directory where log files will be stored (default is ~/.fews_agent/logs)
-        
-    Returns:
-        str: The agent's response
-    """
-    # Use the FEWSConfigAgent class
-    async with FEWSConfigAgent(
-        db_path=db_path, 
-        model=model, 
-        api_key=api_key, 
-        base_url=base_url, 
-        log_level=log_level,
-        log_dir=log_dir
-    ) as agent:
-        return await agent.ask(question) 

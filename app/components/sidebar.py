@@ -1,5 +1,5 @@
 """
-Sidebar component for the FEWS visualization application.
+Zijbalk component voor de FEWS visualisatie applicatie.
 """
 import streamlit as st
 
@@ -14,26 +14,26 @@ def render_sidebar(page_title=None):
         if page_title:
             st.header(page_title)
         
-        st.markdown("### About")
+        st.markdown("### Over")
         st.markdown(
             """
-            This application provides tools for visualizing and analyzing FEWS configurations.
+            Deze applicatie biedt tools voor het visualiseren en analyseren van FEWS-configuraties.
             
-            - View workflows, transformations, and time series
-            - Analyze dependencies between entities
-            - Identify issues and optimization opportunities
-            - Visualize the configuration network
+            - Bekijk workflows, transformaties en tijdreeksen
+            - Analyseer afhankelijkheden tussen entiteiten
+            - Identificeer problemen en optimalisatiemogelijkheden
+            - Visualiseer het configuratienetwerk
             """
         )
         
         st.divider()
-        st.markdown("### Database Connection")
+        st.markdown("### Database Verbinding")
         
         # Show database connection status
         if "tools_interface" in st.session_state:
-            st.success("✓ Connected to database")
+            st.success("✓ Verbonden met database")
         else:
-            st.error("✗ Database not connected")
+            st.error("✗ Database niet verbonden")
             
         st.divider()
         

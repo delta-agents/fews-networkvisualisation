@@ -91,11 +91,13 @@ class TimeSeriesSearchInput(BaseModel):
         parameter_id: Optional pattern to search for in parameter ID
         qualifier_pattern: Optional pattern to search for in qualifier
         module_instance: Optional pattern to search for in module instance
+        endpoint: Optional filter for endpoint status
         include_transformations: Whether to include transformation information
     """
     parameter_id: Optional[str] = Field(None, description="Pattern to search for in parameter ID")
     qualifier_pattern: Optional[str] = Field(None, description="Pattern to search for in qualifier")
     module_instance: Optional[str] = Field(None, description="Pattern to search for in module instance")
+    endpoint: Optional[bool] = Field(None, description="Filter by endpoint status (True for endpoints, False for non-endpoints)")
     include_transformations: bool = Field(False, description="Whether to include transformation information")
 
 
@@ -113,6 +115,8 @@ class TimeSeriesProperties(BaseModel):
     tstype: str = Field(..., description="Type of time series (e.g., 'external historical', 'internal')")
     timess: str = Field(..., description="Time step of the time series (e.g., '10minute', '1hour')")
     description: str = Field(..., description="Formatted string describing the time series using the standard template")
+    endpoint: bool = Field(False, description="Whether this time series is an endpoint")
+    endpoint_desc: Optional[str] = Field(None, description="Endpoint description if the time series is an endpoint")
     transformations: Optional[List[Transformation]] = Field(None, description="Optional list of transformations that use this time series as input or output")
 
 
@@ -467,4 +471,21 @@ class DeadPointsAnalysisOutput(BaseModel):
     parameters_affected: int = Field(..., description="Number of unique parameters affected")
     producers: Optional[Dict[int, List[DeadPointProducer]]] = Field(None, description="Transformations producing dead points, grouped by time series ID")
     recommendations: List[str] = Field(..., description="List of recommendations for addressing dead points")
-    markdown_content: str = Field(..., description="Pre-formatted markdown string that displays the analysis results") 
+    markdown_content: str = Field(..., description="Pre-formatted markdown string that displays the analysis results")
+
+
+class AgentResponse(BaseModel):
+    """
+    Model for standardized agent responses.
+    
+    This model provides a consistent structure for all agent responses,
+    allowing for text, tables, and diagram content.
+    
+    Attributes:
+        markdown_text: Primary text response in markdown format
+        markdown_table: Optional tabular data in markdown format
+        mermaid_diagram: Optional mermaid diagram code
+    """
+    markdown_text: str = Field(..., description="Primary text response in markdown format")
+    markdown_table: Optional[str] = Field(None, description="Optional tabular data in markdown format")
+    mermaid_diagram: Optional[str] = Field(None, description="Optional mermaid diagram code") 

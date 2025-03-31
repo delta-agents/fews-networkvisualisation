@@ -1,7 +1,7 @@
 """
-Settings page for FEWS Network Visualization.
+Instellingen pagina voor FEWS Netwerkvisualisatie.
 
-This page provides configuration options for the application.
+Deze pagina biedt configuratieopties voor de applicatie.
 """
 import streamlit as st
 from pathlib import Path
@@ -21,7 +21,7 @@ from app.components.sidebar import render_sidebar
 
 # Set page configuration
 st.set_page_config(
-    page_title="Settings - FEWS Network Visualization",
+    page_title="Instellingen - FEWS Netwerkvisualisatie",
     page_icon="⚙️",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -41,27 +41,27 @@ config = load_config()
 
 # Render header
 render_header(
-    title=config.get("app_title", "FEWS Network Visualization"),
+    title=config.get("app_title", "FEWS Netwerkvisualisatie"),
     version=config.get("app_version", "0.2.0")
 )
 
 # Render sidebar
-sidebar_container = render_sidebar(page_title="Settings")
+sidebar_container = render_sidebar(page_title="Instellingen")
 
 # Main content
-st.title("Settings")
+st.title("Instellingen")
 
 st.markdown("""
-Configure application settings and manage connections.
+Configureer applicatie-instellingen en beheer verbindingen.
 """)
 
 # Connection settings
-st.header("Database Connection")
+st.header("Database Verbinding")
 
-db_path = st.text_input("Database Path", value=config.get("db_path", ""), help="Path to the FEWS configuration database")
-log_dir = st.text_input("Log Directory", value=config.get("log_dir", ""), help="Directory for logs")
+db_path = st.text_input("Database Pad", value=config.get("db_path", ""), help="Pad naar de FEWS-configuratie database")
+log_dir = st.text_input("Log Map", value=config.get("log_dir", ""), help="Map voor logbestanden")
 
-if st.button("Update Connection"):
+if st.button("Verbinding Bijwerken"):
     # Write configuration to .env file
     env_path = Path(__file__).parent.parent.parent / "env" / ".env"
     env_path.parent.mkdir(parents=True, exist_ok=True)
@@ -75,17 +75,17 @@ if st.button("Update Connection"):
         st.session_state.tools_interface.close()
         st.session_state.pop("tools_interface")
     
-    st.success("Connection settings updated. Restarting connection...")
+    st.success("Verbindingsinstellingen bijgewerkt. Verbinding opnieuw starten...")
     time.sleep(1)
     st.rerun()
 
 # Application settings
-st.header("Application Settings")
+st.header("Applicatie Instellingen")
 
-app_title = st.text_input("Application Title", value=config.get("app_title", "FEWS Network Visualization"))
-app_version = st.text_input("Application Version", value=config.get("app_version", "0.2.0"))
+app_title = st.text_input("Applicatie Titel", value=config.get("app_title", "FEWS Netwerkvisualisatie"))
+app_version = st.text_input("Applicatie Versie", value=config.get("app_version", "0.2.0"))
 
-if st.button("Update Application Settings"):
+if st.button("Applicatie Instellingen Bijwerken"):
     # Write configuration to .env file
     env_path = Path(__file__).parent.parent.parent / "env" / ".env"
     
@@ -119,13 +119,13 @@ if st.button("Update Application Settings"):
     with open(env_path, "w") as f:
         f.write("\n".join(new_lines))
     
-    st.success("Application settings updated. Please refresh the page to see changes.")
+    st.success("Applicatie-instellingen bijgewerkt. Vernieuw de pagina om de wijzigingen te zien.")
 
 # Connection status
-st.header("Connection Status")
+st.header("Verbindingsstatus")
 
 if "tools_interface" in st.session_state:
-    st.success("✓ Connected to database")
+    st.success("✓ Verbonden met database")
     
     # Show database information
     try:
@@ -148,37 +148,37 @@ if "tools_interface" in st.session_state:
             if results and results.results:
                 stats = results.results[0]
                 
-                st.markdown("### Database Stats")
+                st.markdown("### Database Statistieken")
                 col1, col2, col3, col4 = st.columns(4)
                 
                 with col1:
                     st.metric("Workflows", stats["workflow_count"])
                 
                 with col2:
-                    st.metric("Time Series", stats["timeseries_count"])
+                    st.metric("Tijdreeksen", stats["timeseries_count"])
                 
                 with col3:
-                    st.metric("Transformations", stats["transformation_count"])
+                    st.metric("Transformaties", stats["transformation_count"])
                 
                 with col4:
-                    st.metric("Links", stats["link_count"])
+                    st.metric("Koppelingen", stats["link_count"])
         except Exception as e:
-            st.error(f"Error retrieving database stats: {str(e)}")
+            st.error(f"Fout bij ophalen database statistieken: {str(e)}")
     except Exception as e:
-        st.error(f"Error retrieving database information: {str(e)}")
+        st.error(f"Fout bij ophalen database informatie: {str(e)}")
     
     # Add a button to close the connection
-    if st.button("Close Connection"):
+    if st.button("Sluit Verbinding"):
         st.session_state.tools_interface.close()
         st.session_state.pop("tools_interface")
-        st.success("Connection closed.")
+        st.success("Verbinding gesloten.")
         time.sleep(1)
         st.rerun()
 else:
-    st.error("✗ Database not connected")
+    st.error("✗ Database niet verbonden")
     
     # Add a button to initialize the connection
-    if st.button("Initialize Connection"):
+    if st.button("Initialiseer Verbinding"):
         try:
             from app.utils.tools_interface import ToolsInterface
             
@@ -189,11 +189,11 @@ else:
             tools_interface.connect()
             st.session_state.tools_interface = tools_interface
             
-            st.success("Connection initialized successfully.")
+            st.success("Verbinding succesvol geïnitialiseerd.")
             time.sleep(1)
             st.rerun()
         except Exception as e:
-            st.error(f"Failed to initialize connection: {str(e)}")
+            st.error(f"Kon verbinding niet initialiseren: {str(e)}")
 
 # Render footer
 render_footer() 

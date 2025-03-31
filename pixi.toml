@@ -16,6 +16,9 @@ streamlit-flow-component = ">=0.1.0"
 pytest = ">=8.0.2"
 pytest-asyncio = ">=0.25.0"
 
+[pypi-dependencies]
+streamlit_markdown = ">=1.1.0"
+
 [tasks]
 test = "pytest"
 start = { cmd = "streamlit run app/Home.py" } 
