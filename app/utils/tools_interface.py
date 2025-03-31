@@ -122,16 +122,106 @@ class ToolsInterface:
     async def search_timeseries(self, 
                                parameter_id: Optional[str] = None, 
                                qualifier_pattern: Optional[str] = None,
-                               module_instance: Optional[str] = None) -> TimeSeriesSearchOutput:
-        """Search for time series sets by parameter, qualifier, or module."""
+                               module_instance: Optional[str] = None,
+                               endpoint: Optional[Any] = None) -> TimeSeriesSearchOutput:
+        """Search for time series sets by parameter, qualifier, module, or endpoint status/description."""
         self.connect()
+        
+        # Construct a custom query that considers the endpoint parameter
+        query = """
+            SELECT ts.id, ts.modins, ts.vtype, ts.parid, ts.qualifiers, ts.tstype, ts.timess,
+                   CASE WHEN e.tss_id IS NOT NULL THEN 1 ELSE 0 END as is_endpoint,
+                   e.desc as endpoint_desc
+            FROM ts_sets ts
+        """
+        
+        conditions = []
+        
+        # Handle endpoint parameter based on its type
+        if endpoint is not None:
+            if isinstance(endpoint, bool):
+                # Boolean case - filter by endpoint existence
+                if endpoint:
+                    # Show only endpoints
+                    query += " INNER JOIN endpoints e ON ts.id = e.tss_id"
+                else:
+                    # Show only non-endpoints
+                    query += " LEFT JOIN endpoints e ON ts.id = e.tss_id WHERE e.tss_id IS NULL"
+            else:
+                # String case - filter by endpoint description
+                query += " INNER JOIN endpoints e ON ts.id = e.tss_id"
+                
+                # Escape single quotes in the endpoint description
+                safe_endpoint = str(endpoint).replace("'", "''")
+                conditions.append(f"e.desc = '{safe_endpoint}'")
+        else:
+            # No endpoint filter - still join to get endpoint status
+            query += " LEFT JOIN endpoints e ON ts.id = e.tss_id"
+            
+        # Add other conditions
+        if parameter_id:
+            conditions.append(f"ts.parid LIKE '%{parameter_id}%'")
+            
+        if qualifier_pattern:
+            conditions.append(f"ts.qualifiers LIKE '%{qualifier_pattern}%'")
+            
+        if module_instance:
+            conditions.append(f"ts.modins LIKE '%{module_instance}%'")
+            
+        # Add WHERE clause if there are conditions
+        if conditions:
+            # If we already have a WHERE clause from non-endpoints filter, use AND
+            if "WHERE" in query:
+                query += " AND " + " AND ".join(conditions)
+            else:
+                query += " WHERE " + " AND ".join(conditions)
+                
+        query += " ORDER BY ts.id"
+        
+        # Execute the custom query
         ctx = self._create_context()
-        input_data = TimeSeriesSearchInput(
-            parameter_id=parameter_id,
-            qualifier_pattern=qualifier_pattern,
-            module_instance=module_instance
+        result = await self.execute_custom_query(query=query)
+        
+        # Convert results to the expected output format
+        from talkwithfews.models import TimeSeriesSearchResult, TimeSeriesSearchOutput
+        time_series_results = []
+        
+        for row in result.results:
+            # Create description using the standard template
+            description = f"{row['modins']}|{row['vtype']}|{row['parid']}|{row['qualifiers']}|{row['tstype']}|{row['timess']}"
+            is_endpoint = bool(row.get('is_endpoint', 0))
+            endpoint_desc = row.get('endpoint_desc', None)
+            
+            time_series = TimeSeriesSearchResult(
+                id=row['id'],
+                modins=row['modins'],
+                vtype=row['vtype'],
+                parid=row['parid'],
+                qualifiers=row['qualifiers'],
+                tstype=row['tstype'],
+                timess=row['timess'],
+                description=description,
+                endpoint=is_endpoint,
+                endpoint_desc=endpoint_desc
+            )
+            time_series_results.append(time_series)
+        
+        # Generate markdown content
+        markdown_content = f"""## Time Series Search Results
+Found {len(time_series_results)} time series matching the criteria.
+
+| ID | Module Instance | Parameter | Qualifiers | Type | Endpoint |
+|----|----------------|-----------|------------|------|----------|
+"""
+        
+        for ts in time_series_results:
+            endpoint_info = ts.endpoint_desc if ts.endpoint and ts.endpoint_desc else ("✓" if ts.endpoint else "")
+            markdown_content += f"| {ts.id} | {ts.modins} | {ts.parid} | {ts.qualifiers} | {ts.tstype} | {endpoint_info} |\n"
+        
+        return TimeSeriesSearchOutput(
+            results=time_series_results,
+            markdown_content=markdown_content
         )
-        return await search_timeseries(ctx, input_data)
     
     async def search_transformations(self, 
                                     description_pattern: str,

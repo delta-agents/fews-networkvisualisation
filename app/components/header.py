@@ -1,5 +1,5 @@
 """
-Header component for the FEWS visualization application.
+Header component voor de FEWS visualisatie applicatie.
 """
 import streamlit as st
 
@@ -17,6 +17,6 @@ def render_header(title: str, version: str):
         st.title(title)
     
     with col2:
-        st.write(f"**Version:** {version}")
+        st.write(f"**Versie:** {version}")
         
     st.divider() 

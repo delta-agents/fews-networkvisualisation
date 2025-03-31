@@ -29,21 +29,6 @@ async with FEWSConfigAgent(db_path="path/to/database.db", api_key="your-api-key"
     print(response)
 ```
 
-### run_fews_agent
-
-A convenience function for one-off queries.
-
-```python
-from talkwithfews.agent import run_fews_agent
-
-response = await run_fews_agent(
-    db_path="path/to/database.db",
-    question="What workflows are in the system?",
-    api_key="your-api-key"
-)
-print(response)
-```
-
 ### Tools
 
 The agent has access to the following tools:

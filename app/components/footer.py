@@ -1,5 +1,5 @@
 """
-Footer component for the FEWS visualization application.
+Footer component voor de FEWS visualisatie applicatie.
 """
 import streamlit as st
 
@@ -12,10 +12,10 @@ def render_footer():
     col1, col2 = st.columns(2)
     
     with col1:
-        st.write("FEWS Network Visualization")
+        st.write("FEWS Netwerkvisualisatie")
     
     with col2:
-        st.write("© 2023-2024")
+        st.write("© 2025")
         
     st.markdown(
         """

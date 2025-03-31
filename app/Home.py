@@ -1,7 +1,7 @@
 """
-Home page for FEWS Network Visualization.
+Startpagina voor FEWS Netwerkvisualisatie.
 
-This is the main dashboard page for the application.
+Dit is de hoofddashboardpagina voor de applicatie.
 """
 import streamlit as st
 import sys
@@ -21,7 +21,7 @@ from app.utils.tools_interface import ToolsInterface
 
 # Set Streamlit page configuration
 st.set_page_config(
-    page_title="FEWS Network Visualization",
+    page_title="FEWS Netwerkvisualisatie",
     page_icon="🌐",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -49,31 +49,31 @@ if "tools_interface" not in st.session_state:
         tools_interface.connect()
         st.session_state.tools_interface = tools_interface
     except Exception as e:
-        st.error(f"Failed to initialize tools interface: {str(e)}")
+        st.error(f"Fout bij het initialiseren van de tools interface: {str(e)}")
 
 # Render header
 render_header(
-    title=config.get("app_title", "FEWS Network Visualization"),
+    title=config.get("app_title", "FEWS Netwerkvisualisatie"),
     version=config.get("app_version", "0.2.0")
 )
 
 # Render sidebar
-sidebar_container = render_sidebar(page_title="Home")
+sidebar_container = render_sidebar(page_title="Start")
 
 # Main content
 st.markdown(
     """
-    ## Welcome to FEWS Network Visualization
+    ## Welkom bij FEWS Netwerkvisualisatie
     
-    This application helps you analyze and visualize your FEWS configuration.
+    Deze applicatie helpt u bij het analyseren en visualiseren van uw FEWS-configuratie.
     
-    ### Key Features
+    ### Belangrijkste functies
     
-    - **Chat Interface**: Ask questions about your FEWS configuration
-    - **Search and Exploration**: Find specific workflows, time series, and transformations
-    - **Detailed Views**: Examine workflows, transformations, and time series
-    - **Dependency Analysis**: Analyze relationships between configuration elements
-    - **Health Checks**: Identify issues and optimization opportunities
+    - **Chat Interface**: Stel vragen over uw FEWS-configuratie
+    - **Zoeken en Verkennen**: Vind specifieke workflows, tijdreeksen en transformaties
+    - **Gedetailleerde Weergaven**: Onderzoek workflows, transformaties en tijdreeksen
+    - **Afhankelijkheidsanalyse**: Analyseer relaties tussen configuratie-elementen
+    - **Gezondheidscontroles**: Identificeer problemen en optimalisatiemogelijkheden
     """
 )
 
@@ -81,9 +81,9 @@ st.markdown(
 if "tools_interface" in st.session_state:
     tools = st.session_state.tools_interface
     
-    st.markdown("## Database Summary")
+    st.markdown("## Database Samenvatting")
     
-    with st.spinner("Loading database statistics..."):
+    with st.spinner("Database statistieken laden..."):
         try:
             # Execute queries to get statistics directly using the db_connection
             if tools.db_connection:
@@ -110,41 +110,41 @@ if "tools_interface" in st.session_state:
                     st.metric("Workflows", workflow_count)
                 
                 with col2:
-                    st.metric("Time Series", timeseries_count)
+                    st.metric("Tijdreeksen", timeseries_count)
                 
                 with col3:
-                    st.metric("Transformations", transformation_count)
+                    st.metric("Transformaties", transformation_count)
                 
                 with col4:
-                    st.metric("Links", link_count)
+                    st.metric("Koppelingen", link_count)
             else:
-                st.warning("Database connection not initialized properly.")
+                st.warning("Database verbinding niet correct geïnitialiseerd.")
                 
             # Quick access to analysis tools
-            st.markdown("## Quick Actions")
+            st.markdown("## Snelle Acties")
             
             col1, col2, col3 = st.columns(3)
             
             with col1:
-                st.markdown("### Chat & Search")
+                st.markdown("### Chat & Zoeken")
                 st.markdown("- [💬 Chat Interface](01_Chat)")
-                st.markdown("- [🔍 Search and Exploration](02_Search_and_Exploration)")
+                st.markdown("- [🔍 Zoeken en Verkennen](02_Search_and_Exploration)")
             
             with col2:
-                st.markdown("### Analysis")
-                st.markdown("- [🔗 Dependency Analysis](03_Dependency_Analysis)")
-                st.markdown("- [🔬 Health Check](04_Health_Check)")
+                st.markdown("### Analyse")
+                st.markdown("- [🔗 Afhankelijkheidsanalyse](03_Dependency_Analysis)")
+                st.markdown("- [🔬 Gezondheidscontrole](04_Health_Check)")
             
             with col3:
-                st.markdown("### Setup")
-                st.markdown("- [⚙️ Settings](05_Settings)")
-                st.markdown("- [📊 Documentation](https://github.com/yourusername/fews-networkvisualisation)")
-                st.markdown("<small>Documentation opens in a new tab</small>", unsafe_allow_html=True)
+                st.markdown("### Instellingen")
+                st.markdown("- [⚙️ Instellingen](05_Settings)")
+                st.markdown("- [📊 Documentatie](https://github.com/yourusername/fews-networkvisualisation)")
+                st.markdown("<small>Documentatie opent in een nieuw tabblad</small>", unsafe_allow_html=True)
             
         except Exception as e:
-            st.error(f"Error loading database statistics: {str(e)}")
+            st.error(f"Fout bij het laden van database statistieken: {str(e)}")
 else:
-    st.warning("Database connection not available. Please check your configuration.")
+    st.warning("Database verbinding niet beschikbaar. Controleer uw configuratie.")
 
 # Render footer
 render_footer() 
