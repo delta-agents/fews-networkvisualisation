@@ -21,5 +21,6 @@ streamlit_markdown = ">=1.1.0"
 
 [tasks]
 test = "pytest"
-start = { cmd = "streamlit run app/Home.py" } 
+start_old = { cmd = "streamlit run app-old/Home.py" } 
+start = { cmd = "streamlit run app/streamlit_app.py" } 
 docker = { cmd = "streamlit run app/streamlit_app.py --server.port=8501 --server.address=0.0.0.0" } 
