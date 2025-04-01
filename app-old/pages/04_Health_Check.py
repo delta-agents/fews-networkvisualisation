@@ -109,7 +109,7 @@ with tab1:
                 col1, col2, col3 = st.columns(3)
                 
                 with col1:
-                    st.metric("Dode Punten", results.count)
+                    st.metric("Dode TimeSeriesSet Punten", results.count)
                 
                 with col2:
                     st.metric("Betrokken Modules", results.unique_modules)

@@ -488,4 +488,4 @@ class AgentResponse(BaseModel):
     """
     markdown_text: str = Field(..., description="Primary text response in markdown format")
     markdown_table: Optional[str] = Field(None, description="Optional tabular data in markdown format")
-    mermaid_diagram: Optional[str] = Field(None, description="Optional mermaid diagram code") 
+    mermaid_diagram: Optional[str] = Field(None, description="Optional mermaid diagram code, makee sure it uses nodes on a new line") 
