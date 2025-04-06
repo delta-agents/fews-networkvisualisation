@@ -156,6 +156,7 @@ class FEWSConfigAgent:
             "This way you can trace the data flow of time series sets backwards and forwards."
             "You can visualize data flows only using mermaid diagram syntax.\n\n"
             "Response Format:\n"
+            "- You response shall be in Dutch\n"
             "- Use available tools to gather accurate information first\n"
             "- Include explanatory text in markdown format\n"
             "- Add tables when appropriate (markdown format)\n"

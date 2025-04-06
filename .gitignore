@@ -12,3 +12,5 @@ notebooks/*
 !notebooks/validate_tools.ipynb
 env/.env
 logs/fews_agent.log
+doc/TalkWithFEWS-7april-GO-FEWS.key
+doc/TalkWithFEWS-7april-GO-FEWS.pdf
