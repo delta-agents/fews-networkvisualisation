@@ -29,9 +29,9 @@ class TimeseriesSetParser:
             timestepstring = "{}{}{}".format(timestep['multiplier'], timestep['unit'], timestep['timeZone'])
             tsid_map[timestep['id']] = timestepstring
         
-        for ymw_ts in ("yearlyTimeStep", "monthlyTimestep", "weeklyTimestep"):
+        for ymw_ts in ("yearlyTimeStep", "monthlyTimeStep", "weeklyTimeStep"):
             for ts in tsid_root.findall(f"fews:{ymw_ts}", ns):
-                ts_id = timestep.get('id')
+                ts_id = ts.get('id')
                 timestepstring = "{}_{}".format(ymw_ts, ts_id)
                 tsid_map[ts_id] = timestepstring
 
