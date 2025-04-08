@@ -4,6 +4,7 @@ aantekeningen.doc
 test*.ipynb
 /.vscode/launch.json
 /config
+.pixi
 .DS_Store
 db/*.log
 notebooks/*
