@@ -13,12 +13,13 @@ WORKDIR /app
 # Copy project files
 ADD pixi.toml /app/pixi.toml
 ADD ./talkwithfews /app/talkwithfews
-ADD ./logs /app/logs
+#ADD ./logs /app/logs
 ADD ./app /app/app
 
 # Create empty dirs to be filled
 RUN mkdir /app/db
 RUN mkdir /app/env
+RUN mkdir /app/logs
 
 
 # Install dependencies
