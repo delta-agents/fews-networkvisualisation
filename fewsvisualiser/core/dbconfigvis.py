@@ -54,7 +54,6 @@ class DbConfigVis:
                                     qualifiers TEXT,
                                     tstype TEXT NOT NULL,
                                     timess TEXT NOT NULL,
-                                    mic_id INTEGER,
                                     CONSTRAINT PK_ts_sets PRIMARY KEY (id)
                                     )"""
         cursor.execute(dll_timeseries_sets_table)
@@ -65,6 +64,7 @@ class DbConfigVis:
                                     mic_id INTEGER NOT NULL,
                                     ord_nr INTEGER NOT NULL,
                                     desc TEXT NOT NULL,
+                                    config_file TEXT NOT NULL,
                                     CONSTRAINT PK_trafos PRIMARY KEY (id),
                                     UNIQUE(mic_id, ord_nr),
                                     FOREIGN KEY(mic_id) REFERENCES modins_calls(id)
@@ -136,15 +136,15 @@ class DbConfigVis:
             logger.error(error)
             raise
 
-    def get_trafo_id(self, mic_id, ord_nr, desc, logger):
+    def get_trafo_id(self, mic_id, ord_nr, desc, config_file, logger):
         try:
             cursor = self.con.cursor()
             # find trafo_id
             trafo_row = self.con.execute("SELECT id FROM trafos WHERE mic_id=:mic_id AND ord_nr=:ord_nr", {"mic_id": mic_id, "ord_nr": ord_nr}).fetchone()
             if trafo_row is None:
                 trafo_id = self.get_max_trafos_id() + 1
-                insert_statement = """INSERT INTO 'trafos' ('id','mic_id','ord_nr','desc') VALUES (?, ?, ?, ?);"""
-                cursor.execute(insert_statement, (trafo_id, mic_id, ord_nr, desc))
+                insert_statement = """INSERT INTO 'trafos' ('id','mic_id','ord_nr','desc', 'config_file') VALUES (?, ?, ?, ?, ?);"""
+                cursor.execute(insert_statement, (trafo_id, mic_id, ord_nr, desc, config_file))
                 self.con.commit()
             else:
                 trafo_id = trafo_row[0]
@@ -155,8 +155,8 @@ class DbConfigVis:
             cursor.close()
             return trafo_id
 
-    def add_inoutput(self, mic_id, ord_nr, desc, tss_id, direction, logger):
-        trafo_id = self.get_trafo_id(mic_id, ord_nr, desc, logger)
+    def add_inoutput(self, mic_id, ord_nr, desc, config_file, tss_id, direction, logger):
+        trafo_id = self.get_trafo_id(mic_id, ord_nr, desc, config_file, logger)
         try:
             cursor = self.con.cursor()
             insert_statement = """INSERT INTO 'links' ('trafo_id','tss_id','inout') VALUES (?, ?, ?);"""
@@ -170,11 +170,11 @@ class DbConfigVis:
         finally:
             cursor.close()
 
-    def add_input(self, mic_id, ord_nr, desc, tss_id, logger):
-        self.add_inoutput(mic_id, ord_nr, desc, tss_id, 'in', logger)
+    def add_input(self, mic_id, ord_nr, desc, config_file, tss_id, logger):
+        self.add_inoutput(mic_id, ord_nr, desc, config_file, tss_id, 'in', logger)
 
-    def add_output(self, mic_id, ord_nr, desc, tss_id, logger):
-        self.add_inoutput(mic_id, ord_nr, desc, tss_id, 'out', logger)
+    def add_output(self, mic_id, ord_nr, desc, config_file, tss_id, logger):
+        self.add_inoutput(mic_id, ord_nr, desc, config_file, tss_id, 'out', logger)
 
     def insert_props_set(self, properties_set, logger) -> int:
         if not properties_set:
@@ -197,6 +197,7 @@ class DbConfigVis:
         finally:
             cursor.close()
             return new_ps_id
+
 
     def add_call_stack(self, wfid, desc, wffn, parent, psid) -> int:
         try:
@@ -259,10 +260,7 @@ class DbConfigVis:
 
             cursor = self.con.cursor()
             data = (tss_id, ) + tss
-            if len(data) == 7:
-                insert_statement = """INSERT INTO 'ts_sets' ('id', 'modins', 'vtype', 'parid', 'qualifiers', 'tstype', 'timess') VALUES (?, ?, ?, ?, ?, ?, ?);"""
-            else:
-                insert_statement = """INSERT INTO 'ts_sets' ('id', 'modins', 'vtype', 'parid', 'qualifiers', 'tstype', 'timess', 'mic_id') VALUES (?, ?, ?, ?, ?, ?, ?, ?);"""
+            insert_statement = """INSERT INTO 'ts_sets' ('id', 'modins', 'vtype', 'parid', 'qualifiers', 'tstype', 'timess') VALUES (?, ?, ?, ?, ?, ?, ?);"""
             cursor.execute(insert_statement, data)
             self.con.commit()
         except sqlite3.Error as error:
@@ -273,13 +271,7 @@ class DbConfigVis:
 
     def get_tss_id(self, tss, logger):
         try:
-            if tss[4] == "temporary":
-                # temporary tss's are only the same in case they are in the same mic_id
-                select_statement = "SELECT id FROM ts_sets WHERE modins = ? AND vtype = ? AND parid = ? AND qualifiers = ? AND tstype = ? AND timess = ? AND mic_id = ?"
-            else:
-                # non-temporary tss's are the same irrespective of the mic_id
-                select_statement = "SELECT id FROM ts_sets WHERE modins = ? AND vtype = ? AND parid = ? AND qualifiers = ? AND tstype = ? AND timess = ?"
-
+            select_statement = "SELECT id FROM ts_sets WHERE modins = ? AND vtype = ? AND parid = ? AND qualifiers = ? AND tstype = ? AND timess = ?"
             row = self.con.execute(select_statement, tss).fetchone()
             if row is None:
                 tss_id = self.add_tts(tss, logger)

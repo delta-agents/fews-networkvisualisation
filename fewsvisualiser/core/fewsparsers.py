@@ -27,6 +27,8 @@ class TimeseriesSetParser:
             timestep = {'multiplier': "", 'unit': "", 'timeZone': ""}
             [timestep.update({key: value}) for key, value in ts.attrib.items()]
             timestepstring = "{}{}{}".format(timestep['multiplier'], timestep['unit'], timestep['timeZone'])
+            if 'monthDays' in timestep.keys():
+                timestepstring = "{}{}".format(timestepstring, timestep['monthDays'])
             tsid_map[timestep['id']] = timestepstring
         
         for ymw_ts in ("yearlyTimeStep", "monthlyTimeStep", "weeklyTimeStep"):
@@ -93,7 +95,8 @@ class TimeseriesSetParser:
             timestepstring = "{}{}{}".format(timestep['multiplier'], timestep['unit'], timestep['timeZone'])
 
         if timeSeriesType == "temporary":
-            return (moduleInstanceId, valueType, parameterId, qualifiers, timeSeriesType, timestepstring, mic_id)
+            # temporary series are only the same in case they share the same call stack
+            return (moduleInstanceId, valueType, parameterId, qualifiers, f"tmp_{mic_id}", timestepstring)
         else:
             return (moduleInstanceId, valueType, parameterId, qualifiers, timeSeriesType, timestepstring)
 
@@ -138,6 +141,8 @@ class Workflows_parser:
         pps = db.get_props_set(ppsid, logger)
         # load wf_file into tree
         wf_filepath = Workflows_parser.get_path_of_workflowfile(config_root, pwffn)
+        # for testing
+        config_file_name = wf_filepath.name
         wf_root = ET.parse(wf_filepath).getroot()
 
         properties_changed = False
@@ -172,20 +177,22 @@ class Workflows_parser:
                 Workflows_parser.recurse_into_tasks(db, config_root, (new_cs, new_wfid, new_wffn, new_psid), logger)
             else:
                 # we reached the call to the module file
+                moduleInstanceId = Helpers.find_element(activity, 'fews:moduleInstanceId', ns)
+                moduleConfigFileName = Helpers.find_element(activity, 'fews:moduleConfigFileName', ns)
 
                 # read wf properties and add/overwrite pps
                 new_ps = Workflows_parser.get_props(activity, wf_ps)
-                if activity.find('fews:properties', ns):
+                if activity.find('fews:properties', ns) or moduleConfigFileName:
                     properties_changed = True
+
+                if moduleConfigFileName:
+                    new_ps.update({'MODULE_INSTANCE_ID': moduleInstanceId})
+                else:
+                    moduleConfigFileName = moduleInstanceId
 
                 # in case the wf has properties: define a new properties set
                 new_psid = db.insert_props_set(new_ps, logger) if properties_changed else ppsid
 
-                moduleInstanceId = Helpers.find_element(activity, 'fews:moduleInstanceId', ns)
-                moduleConfigFileName = Helpers.find_element(activity, 'fews:moduleConfigFileName', ns)
-                if not moduleConfigFileName:
-                    moduleConfigFileName = moduleInstanceId
-                
                 # add call stack and current properties set to the database
                 logger.debug ("{} called by {} with properties id {}-> {}".format(moduleConfigFileName, pwffn, new_psid, new_ps))
                 db.add_modins_calls(moduleConfigFileName, pcsid, new_psid)
@@ -265,6 +272,7 @@ class Modins_parser:
             i_call_stacks = i_call_stacks + 1
 
             mi_file_path = Modins_parser.get_path_of_modinsfile(config_root, modins_fn)
+            config_file = (mi_file_path.as_posix()).replace(config_root.as_posix(), "")
             mi_root = ET.parse(mi_file_path).getroot()
 
             if mi_root.tag == r'{http://www.wldelft.nl/fews}transformationModule':
@@ -285,7 +293,7 @@ class Modins_parser:
                     for input in Helpers.find_element_recursive(trafo, 'fews:inputVariable', [], ns, logger):
                         if Helpers.find_tag(input, 'fews:variableId', ns):
                             vid = Helpers.solve_props(Helpers.find_element(input, 'fews:variableId', ns), props)
-                            db.add_input(mic_id, ord_nr, trafo_desc, variables[vid], logger)
+                            db.add_input(mic_id, ord_nr, trafo_desc, config_file, variables[vid], logger)
                             logger.debug("input: {}".format(variables[vid]))
                         else:
                             tss_elem = input.find('fews:timeSeriesSet', ns)
@@ -295,14 +303,14 @@ class Modins_parser:
                             
                             tss = TimeseriesSetParser.parse_tss(tss_elem, props, mic_id)
                             tss_id = db.get_tss_id(tss, logger)
-                            db.add_input(mic_id, ord_nr, trafo_desc, tss_id, logger)
+                            db.add_input(mic_id, ord_nr, trafo_desc, config_file, tss_id, logger)
                             logger.debug("input: {}".format(tss))
 
                     # collect outputs
                     for output in Helpers.find_element_recursive(trafo, 'fews:outputVariable', [], ns, logger):
                         if Helpers.find_tag(output, 'fews:variableId', ns):
                             vid = Helpers.solve_props(Helpers.find_element(output, 'fews:variableId', ns), props)
-                            db.add_output(mic_id, ord_nr, trafo_desc, variables[vid], logger)
+                            db.add_output(mic_id, ord_nr, trafo_desc, config_file, variables[vid], logger)
                             logger.debug("output: {}".format(variables[vid]))
                         else:
                             tss_elem = output.find('fews:timeSeriesSet', ns)
@@ -312,7 +320,7 @@ class Modins_parser:
                             
                             tss = TimeseriesSetParser.parse_tss(tss_elem, props, mic_id)
                             tss_id = db.get_tss_id(tss, logger)
-                            db.add_output(mic_id, ord_nr, trafo_desc, tss_id, logger)
+                            db.add_output(mic_id, ord_nr, trafo_desc, config_file, tss_id, logger)
                             logger.debug("output: {}".format(tss))
 
                     # for <user><simple> find coefficients and local variables
@@ -345,7 +353,7 @@ class Modins_parser:
                         tss_id = db.get_tss_id(tss, logger)
                         local_vars.add(vid)
                         # here we assume that in case a variable is defined in a trafo, it will also be used
-                        db.add_input(mic_id, ord_nr, trafo_desc, tss_id, logger)
+                        db.add_input(mic_id, ord_nr, trafo_desc, config_file, tss_id, logger)
                         logger.debug("input: {}".format(tss))
 
                     # user simple
@@ -358,7 +366,7 @@ class Modins_parser:
                         # the remaining words should be variables at module level
                         for w in words:
                             if w in variables:
-                                db.add_input(mic_id, ord_nr, trafo_desc, variables[w], logger)
+                                db.add_input(mic_id, ord_nr, trafo_desc, config_file, variables[w], logger)
                             else:
                                 logger.warning(f"Variable '{w}' not found in variables dictionary for transformation '{trafo_desc}'")
 
@@ -376,7 +384,7 @@ class Modins_parser:
                                     tss = TimeseriesSetParser.parse_tss(itss, props, mic_id)
                                     tss_id = db.get_tss_id(tss, logger)
                                     ord_nr = ord_nr + 1
-                                    db.add_input(mic_id, ord_nr, modins_fn, tss_id, logger)
+                                    db.add_input(mic_id, ord_nr, modins_fn, config_file, tss_id, logger)
 
                     for imac in ac.findall('fews:importActivities', ns):
                         for tsia in Helpers.find_element_recursive(imac, outputs, [], ns, logger):
@@ -385,7 +393,7 @@ class Modins_parser:
                                     tss = TimeseriesSetParser.parse_tss(itss, props, mic_id)
                                     tss_id = db.get_tss_id(tss, logger)
                                     ord_nr = ord_nr + 1
-                                    db.add_output(mic_id, ord_nr, modins_fn, tss_id, logger)
+                                    db.add_output(mic_id, ord_nr, modins_fn, config_file, tss_id, logger)
             # imports                
             elif mi_root.tag == r'{http://www.wldelft.nl/fews}timeSeriesImportRun':
                 logger.debug(mi_root.tag)
@@ -394,7 +402,7 @@ class Modins_parser:
                     tss = TimeseriesSetParser.parse_tss(tsss, props, mic_id)
                     tss_id = db.get_tss_id(tss, logger)
                     ord_nr = ord_nr + 1
-                    db.add_output(mic_id, ord_nr, modins_fn, tss_id, logger)
+                    db.add_output(mic_id, ord_nr, modins_fn, config_file, tss_id, logger)
                     db.add_endpoint(tss_id, modins_fn, logger)
             # exports and reports
             elif mi_root.tag in {r'{http://www.wldelft.nl/fews}timeSeriesExportRun', r'{http://www.wldelft.nl/fews}reports'}:
@@ -404,7 +412,7 @@ class Modins_parser:
                     tss = TimeseriesSetParser.parse_tss(tsss, props, mic_id)
                     tss_id = db.get_tss_id(tss, logger)
                     ord_nr = ord_nr + 1
-                    db.add_input(mic_id, ord_nr, modins_fn, tss_id, logger)
+                    db.add_input(mic_id, ord_nr, modins_fn, config_file, tss_id, logger)
                     db.add_endpoint(tss_id, modins_fn, logger)
             elif mi_root.tag in ignored_modules:
                 continue
