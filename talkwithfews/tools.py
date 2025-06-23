@@ -587,7 +587,7 @@ async def get_transformation_details(ctx: RunContext[Deps], input: Transformatio
     """
     # Get transformation details and time series links
     query = f"""
-    SELECT t.id, t.desc, t.ord_nr, t.mic_id, mc.modins,
+    SELECT t.id, t.desc, t.ord_nr, t.config_file, t.mic_id, mc.modins,
            l.inout, ts.id as tss_id
     FROM trafos t
     JOIN modins_calls mc ON t.mic_id = mc.id
@@ -611,6 +611,7 @@ async def get_transformation_details(ctx: RunContext[Deps], input: Transformatio
                 'id': row['id'],
                 'desc': row['desc'],
                 'ord_nr': row['ord_nr'],
+                'config_file': row['config_file'],
                 'mic_id': row['mic_id'],
                 'modins': row['modins'],
                 'time_series_links': []
@@ -626,6 +627,7 @@ async def get_transformation_details(ctx: RunContext[Deps], input: Transformatio
     markdown_content = f"""## Transformation Details
 **ID:** {transformation_data[input.transformation_id]['id']}
 **Description:** {transformation_data[input.transformation_id]['desc']}
+**Config File:** {transformation_data[input.transformation_id]['config_file']}
 
 ### Basic Information
 | Property | Value |

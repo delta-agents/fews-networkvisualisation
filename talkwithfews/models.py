@@ -289,6 +289,7 @@ class TransformationDetails(BaseModel):
     id: int = Field(..., description="Unique identifier of the transformation")
     desc: str = Field(..., description="Description of what the transformation does")
     ord_nr: int = Field(..., description="Order number indicating the sequence in the module configuration")
+    config_file: str = Field(..., description="Relative path to the module configuration file")
     mic_id: int = Field(..., description="Unique identifier of the module configuration")
     modins: str = Field(..., description="Name of the module instance containing this transformation")
     time_series_links: List[TimeSeriesLink] = Field(..., description="List of time series connected to this transformation")
