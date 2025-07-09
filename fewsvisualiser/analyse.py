@@ -1,4 +1,3 @@
-import logging
 from pathlib import Path
 from fewsvisualiser.core.dbconfigvis import DbConfigVis
 from fewsvisualiser.core.fewsparsers import Workflows_parser, TimeseriesSetParser, Modins_parser, Endpoint_parsers, CoefficientSet_parser
