@@ -370,6 +370,42 @@ class Modins_parser:
                             else:
                                 logger.warning(f"Variable '{w}' not found in variables dictionary for transformation '{trafo_desc}'")
 
+                    # structure functions
+                    for input in Helpers.find_element_recursive(trafo, 'fews:structure', [], ns, logger):
+                        for element in ['fews:limitVariable', 'fews:status', 'fews:speed', 'fews:head', 'fews:headlevel', 'fews:taillevel', 'fews:height']:
+                            for sub_elem in Helpers.find_element_recursive(input, element, [], ns, logger):
+                                if Helpers.find_tag(sub_elem, 'fews:variableId', ns):
+                                    vid = Helpers.solve_props(Helpers.find_element(sub_elem, 'fews:variableId', ns), props)
+                                    db.add_input(mic_id, ord_nr, trafo_desc, config_file, variables[vid], logger)
+                                    logger.debug("input: {}".format(variables[vid]))
+                                else:
+                                    tss_elem = sub_elem.find('fews:timeSeriesSet', ns)
+                                    if tss_elem is None:
+                                        logger.error(f"Critical error: Missing required timeSeriesSet in {element} for transformation {trafo_desc}")
+                                        continue
+                                    
+                                    tss = TimeseriesSetParser.parse_tss(tss_elem, props, mic_id)
+                                    tss_id = db.get_tss_id(tss, logger)
+                                    db.add_input(mic_id, ord_nr, trafo_desc, config_file, tss_id, logger)
+                                    logger.debug("input: {}".format(tss))
+
+                        for sub_elem in Helpers.find_element_recursive(input, 'fews:discharge', [], ns, logger):
+                            if Helpers.find_tag(sub_elem, 'fews:variableId', ns):
+                                vid = Helpers.solve_props(Helpers.find_element(sub_elem, 'fews:variableId', ns), props)
+                                db.add_output(mic_id, ord_nr, trafo_desc, config_file, variables[vid], logger)
+                                logger.debug("input: {}".format(variables[vid]))
+                            else:
+                                tss_elem = sub_elem.find('fews:timeSeriesSet', ns)
+                                if tss_elem is None:
+                                    logger.error(f"Critical error: Missing required timeSeriesSet in {element} for transformation {trafo_desc}")
+                                    continue
+                                
+                                tss = TimeseriesSetParser.parse_tss(tss_elem, props, mic_id)
+                                tss_id = db.get_tss_id(tss, logger)
+                                db.add_output(mic_id, ord_nr, trafo_desc, config_file, tss_id, logger)
+                                logger.debug("input: {}".format(tss))
+
+
             # GENERAL ADAPTER
             elif mi_root.tag == r'{http://www.wldelft.nl/fews}generalAdapterRun':
                 inputs = ['fews:exportTimeSeriesActivity', 'fews:exportNetcdfActivity', 'fews:exportCustomFormatTimeSeriesActivity']
