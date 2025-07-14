@@ -34,6 +34,7 @@ class DbCLocSet:
                 locset_id TEXT NOT NULL,
                 name TEXT,
                 source TEXT NOT NULL,
+                field TEXT NOT NULL,
                 FOREIGN KEY(locset_id) REFERENCES locsets(id))"""
         cursor.execute(dll_attributes_table)
         logger.info("attributes table created")

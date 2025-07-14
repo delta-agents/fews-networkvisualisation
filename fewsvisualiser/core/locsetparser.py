@@ -4,6 +4,32 @@ import xml.etree.ElementTree as ET
 ns = {'fews': 'http://www.wldelft.nl/fews'}
 
 class Locset_parser:
+
+    @staticmethod
+    def parse_attributes(ls, db, locset_id, source, logger):
+        for attr in ls.findall('fews:attribute', ns):
+            attribute = {'id': "", 'name': "", 'locset_id': "", 'source': "", 'field': ""}  # Initialize with default values
+            [attribute.update({key: value}) for key, value in attr.attrib.items()]
+            if not attribute['name']:
+                attribute['name'] = attribute['id']
+            attribute['locset_id'] = locset_id
+            attribute['source'] = source
+
+            # 'fews:description', 
+            for attr_tag in ['fews:boolean', 'fews:dateTime', 'fews:number', 'fews:text']:
+                try:
+                    field = attr.find(attr_tag, ns)
+                    if field is not None and field.text:
+                        attribute['field'] = field.text.strip("%")
+                        db.insert_attribute(attribute, logger)
+                        break
+                except AttributeError:
+                    pass
+
+
+
+
+
     @staticmethod
     def parse_locationsets(config_root, db, logger):
         locset_path = config_root / "RegionConfigFiles" / "LocationSets.xml"
@@ -38,12 +64,13 @@ class Locset_parser:
             print(f"LocationSet: {locset}")
             db.insert_locset(locset, logger)
 
-            # find parent location set if it exists
+            # find parent locationset if it exists
             for parent in ls.findall('fews:locationSetId', ns):
                 parent_id = parent.text.strip()
                 db.insert_locset_relation(locset['id'], parent_id, logger)
            
-
+            # parse attributes
+            Locset_parser.parse_attributes(ls, db, locset['id'], locset['source'], logger)
 
         
 

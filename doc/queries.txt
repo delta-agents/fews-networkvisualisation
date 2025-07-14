@@ -1,0 +1,41 @@
+--select * from ts_sets where id = 231
+--select * from trafos where id in (select trafo_id from links where tss_id = 231 and inout = 'out')
+--select * from modins_calls where id in (select mic_id from trafos where id in (select trafo_id from links where tss_id = 231 and inout = 'out'))
+--select * from props_sets where id in (select props_set_id from modins_calls where id in (select mic_id from trafos where id in (select trafo_id from links where tss_id = 231 and inout = 'out')))
+select call_stacks.id cs_id, call_stacks.wf_id wf_id, modins_calls.id mic_id, modins_calls.modins modins, trafos.id trafo_id, trafos.desc trafo, trafos.ord_nr nr 
+from modins_calls
+inner join trafos ON trafos.mic_id = modins_calls.id
+inner join call_stacks ON call_stacks.id = modins_calls.call_stack_id
+--where trafos.id = 6132
+
+
+SELECT trafos.mic_id mic_id, links.trafo_id trafo_id, links.tss_id tss_id, links.inout inout 
+FROM links 
+INNER JOIN trafos ON trafos.id = links.trafo_id
+WHERE tss_id = 231
+
+
+SELECT trafo_mic_cs_view.*, links.tss_id, links.inout
+FROM trafo_mic_cs_view
+INNER JOIN links USING(trafo_id)
+WHERE links.tss_id = 231
+ORDER BY cs_id, mic_id
+
+
+select o.* 
+from links o
+where o.inout = 'out'
+and tss_id not in (select i.tss_id from links i where i.inout = 'in')
+and tss_id not in (select e.tss_id from endpoints e)
+
+Deze wordt ontrecht (?) weergegegeven in query
+2456	OWEVAPProfile	scalar	EowF		temporary	dayGMT+1	1435
+
+select * from ts_sets where id in (
+select distinct o.tss_id
+from links o
+where o.inout = 'out'
+and tss_id not in (select i.tss_id from links i where i.inout = 'in')
+and tss_id not in (select e.tss_id from endpoints e))
+
+of is de query niet goed?

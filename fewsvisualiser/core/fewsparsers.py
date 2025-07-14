@@ -351,6 +351,7 @@ class Modins_parser:
                     # user simple local variables
                     local_vars = set()
                     for input in Helpers.find_element_recursive(trafo, 'fews:inputVariableDefinition', [], ns, logger):
+                        # here we assume that in case a variable is defined in a trafo, it will also be used
                         vid = Helpers.solve_props(Helpers.find_element(input, 'fews:variableId', ns), props)
                         tss_elem = input.find('fews:timeSeriesSet', ns)
                         if tss_elem is None:
