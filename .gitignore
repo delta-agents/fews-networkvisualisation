@@ -7,6 +7,7 @@ test*.ipynb
 .pixi
 .DS_Store
 db/*.log
+db/*.db*
 notebooks/*
 !notebooks/*.py
 !notebooks/talkwithfews.ipynb

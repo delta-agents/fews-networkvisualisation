@@ -16,3 +16,6 @@ classifiers = [
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: BSD License"
 ]
+
+[tool.hatch.version]
+path = "fewsvisualiser/__init__.py"
