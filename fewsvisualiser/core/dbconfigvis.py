@@ -54,6 +54,8 @@ class DbConfigVis:
                                     qualifiers TEXT,
                                     tstype TEXT NOT NULL,
                                     timess TEXT NOT NULL,
+                                    aggregation TEXT,
+                                    description TEXT,
                                     CONSTRAINT PK_ts_sets PRIMARY KEY (id)
                                     )"""
         cursor.execute(dll_timeseries_sets_table)
@@ -260,7 +262,7 @@ class DbConfigVis:
 
             cursor = self.con.cursor()
             data = (tss_id, ) + tss
-            insert_statement = """INSERT INTO 'ts_sets' ('id', 'modins', 'vtype', 'parid', 'qualifiers', 'tstype', 'timess') VALUES (?, ?, ?, ?, ?, ?, ?);"""
+            insert_statement = """INSERT INTO 'ts_sets' ('id', 'modins', 'vtype', 'parid', 'qualifiers', 'tstype', 'timess', 'aggregation', 'description') VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);"""
             cursor.execute(insert_statement, data)
             self.con.commit()
         except sqlite3.Error as error:
@@ -271,12 +273,26 @@ class DbConfigVis:
 
     def get_tss_id(self, tss, logger):
         try:
-            select_statement = "SELECT id FROM ts_sets WHERE modins = ? AND vtype = ? AND parid = ? AND qualifiers = ? AND tstype = ? AND timess = ?"
-            row = self.con.execute(select_statement, tss).fetchone()
+            select_statement = "SELECT id, description FROM ts_sets WHERE modins = ? AND vtype = ? AND parid = ? AND qualifiers = ? AND tstype = ? AND timess = ? AND aggregation = ?"
+            # the eighth elem is the description, which is optional
+            desc_id = 7
+            row = self.con.execute(select_statement, tss[0:desc_id]).fetchone()
             if row is None:
                 tss_id = self.add_tts(tss, logger)
             else:
                 tss_id = row[0]
+                # append description if it exists
+                if tss[7]:
+                    if not tss[desc_id].lower() in row[1].lower():
+                        # update the description
+                        logger.info(f"Updating description for tss_id {tss_id}")
+                        if row[1]:
+                            new_description = row[1] + "; " + tss[desc_id].lower()
+                        else:
+                            new_description = tss[desc_id].lower()
+                        update_statement = "UPDATE ts_sets SET description = ? WHERE id = ?"
+                        self.con.execute(update_statement, (new_description, tss_id))
+                        self.con.commit()
         except sqlite3.Error as error:
             logger.error("Error get_tss_id: ", error)
             raise

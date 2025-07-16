@@ -8,11 +8,12 @@ ns = {'fews': 'http://www.wldelft.nl/fews'}
 # N.B. some of these html symbols are interpreted by python: therefore &gt; and >
 symbols_delimiters = ['+','-','/','*','^','&gt;','>','&lt;','<','&gt;=','&lt;=','&amp;&amp;','&&','=','!','(',')','||',',']
 symbols_strings = ['isMissing','if','or','and','sin','cos','tan','asin','acos','atan','sinh','cosh', \
-                   'tanh','asinh','acosh','atanh','log','ln','exp','sqrt','abs','pow','max','min', 'pi', 'NaN', '"NaN"', '']
+                   'tanh','asinh','acosh','atanh','log','ln','exp','sqrt','abs','pow','max','min', 'pi', 'NaN', '"NaN"', 'PREVIOUS_OUTPUT_VALUE', '']
 ignored_modules = { r'{http://www.wldelft.nl/fews}reportExport', \
                     r'{http://www.wldelft.nl/fews}secondaryValidation', \
                     r'{http://www.wldelft.nl/fews}importAmalgamate',  \
                     r'{http://www.wldelft.nl/fews}configUpdateModule', \
+                    r'{http://www.wldelft.nl/fews}forecastLengthEstimator', \
                     r'{http://www.wldelft.nl/fews}contentUpdateChecker'}
 
 tsid_map = {}
@@ -75,6 +76,8 @@ class TimeseriesSetParser:
         if ts_type_elem is None or ts_type_elem.text is None:
             raise ValueError("Missing timeSeriesType in timeSeriesSet")
         timeSeriesType = Helpers.solve_props(ts_type_elem.text, props)
+        # temporary series are only the same in case they share the same call stack
+        if timeSeriesType == "temporary": timeSeriesType = f"tmp_{mic_id}" 
 
         # multiple qualifiers are possible
         q_list = []
@@ -94,11 +97,23 @@ class TimeseriesSetParser:
         else:
             timestepstring = "{}{}{}".format(timestep['multiplier'], timestep['unit'], timestep['timeZone'])
 
-        if timeSeriesType == "temporary":
-            # temporary series are only the same in case they share the same call stack
-            return (moduleInstanceId, valueType, parameterId, qualifiers, f"tmp_{mic_id}", timestepstring)
+        # aggregationPeriod is not mandatory, but if it exists, it should be parsed
+        aggregationPeriod_elem = root_tss.find('fews:aggregationPeriod', ns)
+        if aggregationPeriod_elem is not None:
+            aggregationPeriod = {'unit': "", 'start': "", 'end': ""}
+            [aggregationPeriod.update({key: value}) for key, value in aggregationPeriod_elem.items()]
+            aggregationString = "{}_{}_{}".format(aggregationPeriod['unit'], aggregationPeriod['start'], aggregationPeriod['end'])
         else:
-            return (moduleInstanceId, valueType, parameterId, qualifiers, timeSeriesType, timestepstring)
+            aggregationString = ""
+
+        # optional element description can be different at different places in the config for the same tss
+        description_elem = root_tss.find('fews:description', ns)
+        if description_elem is not None:
+            description = Helpers.solve_props(description_elem.text, props).lower().strip()
+        else:
+            description = ""
+
+        return (moduleInstanceId, valueType, parameterId, qualifiers, timeSeriesType, timestepstring, aggregationString, description)
 
 class Workflows_parser:
     @staticmethod
@@ -186,7 +201,7 @@ class Workflows_parser:
                     properties_changed = True
 
                 if moduleConfigFileName:
-                    new_ps.update({'MODULE_INSTANCE_ID': moduleInstanceId})
+                    new_ps.update({'MODULE_INSTANCE_ID': Helpers.solve_props(moduleInstanceId, new_ps)})
                 else:
                     moduleConfigFileName = moduleInstanceId
 
@@ -323,13 +338,43 @@ class Modins_parser:
                 for trafo in mi_root.findall('fews:transformation', ns):
                     trafo_desc = Helpers.solve_props(trafo.attrib['id'], props)
                     ord_nr = ord_nr + 1
-                    # collect inputs
-                    for input in Helpers.find_element_recursive(trafo, 'fews:inputVariable', [], ns, logger):
-                        Modins_parser.add_input(db, config_file, input, props, mic_id, ord_nr, trafo_desc, variables, ns, logger)
+                    # collect local input variables
+                    local_vars = {}
+                    for element in ['fews:inputVariableDefinition', 'fews:limitVariable', \
+                                    'fews:nonEquidistantInputVariable', 'fews:equidistantInputVariable' \
+                                    'fews:timeReferenceInputVariable', 'fews:inputVariable']:
+                        for input in Helpers.find_element_recursive(trafo, element, [], ns, logger):
+                            vid = Helpers.solve_props(Helpers.find_element(input, 'fews:variableId', ns), props)
+
+                            template_vid = Helpers.solve_props(Helpers.find_element(input, 'fews:templateVariableId', ns), props)
+                            # TODO: we will need the locid when we will be solving the locationsets
+                            # locid = Helpers.solve_props(Helpers.find_element(input, 'fews:locationId', ns), props)
+                            if template_vid:
+                                logger.debug(f"Template variable {template_vid} found in {element} for transformation {trafo_desc}")
+                                tss_id = variables[template_vid]
+                                local_vars[vid] = tss_id
+                                tss = db.get_tss(tss_id, logger) # only to log it
+                                # TODO: do something with the locid
+                            else:
+                                if vid not in variables:
+                                    tss_elem = input.find('fews:timeSeriesSet', ns)
+                                    if tss_elem is None:
+                                        logger.error(f"Critical error: Missing required timeSeriesSet in {element} for transformation {trafo_desc}")
+                                        continue
+                                    tss = TimeseriesSetParser.parse_tss(tss_elem, props, mic_id)
+                                    tss_id = db.get_tss_id(tss, logger)
+                                    local_vars[vid] = tss_id
+                                else:
+                                    tss_id = variables[vid]
+                                    tss = db.get_tss(tss_id, logger) # only to log it
+
+                            # here we assume that in case a variable is defined in a trafo, it will also be used
+                            db.add_input(mic_id, ord_nr, trafo_desc, config_file, tss_id, logger)
+                            logger.debug("input: {}".format(tss))
 
                     # collect outputs
                     for output in Helpers.find_element_recursive(trafo, 'fews:outputVariable', [], ns, logger):
-                        Modins_parser.add_output(db, config_file, output, props, mic_id, ord_nr, trafo_desc, variables, ns, logger)
+                        Modins_parser.add_output(db, config_file, output, props, mic_id, ord_nr, trafo_desc, variables | local_vars, ns, logger)
 
                     # for <user><simple> find coefficients and local variables
                     # user simple coefficients
@@ -347,23 +392,6 @@ class Modins_parser:
                     if cs and cs_fn:
                         cs_id = "{}_{}".format(cs_fn, cs)
                         coefficients = coefficients.union(coefficientSets[cs_id])
-
-                    # user simple local variables
-                    local_vars = set()
-                    for input in Helpers.find_element_recursive(trafo, 'fews:inputVariableDefinition', [], ns, logger):
-                        # here we assume that in case a variable is defined in a trafo, it will also be used
-                        vid = Helpers.solve_props(Helpers.find_element(input, 'fews:variableId', ns), props)
-                        tss_elem = input.find('fews:timeSeriesSet', ns)
-                        if tss_elem is None:
-                            logger.error(f"Critical error: Missing required timeSeriesSet in inputVariableDefinition for transformation {trafo_desc}")
-                            continue
-                        
-                        tss = TimeseriesSetParser.parse_tss(tss_elem, props, mic_id)
-                        tss_id = db.get_tss_id(tss, logger)
-                        local_vars.add(vid)
-                        # here we assume that in case a variable is defined in a trafo, it will also be used
-                        db.add_input(mic_id, ord_nr, trafo_desc, config_file, tss_id, logger)
-                        logger.debug("input: {}".format(tss))
 
                     # user simple
                     for input in Helpers.find_element_recursive(trafo, 'fews:expression', [], ns, logger):
@@ -424,7 +452,7 @@ class Modins_parser:
                     db.add_output(mic_id, ord_nr, modins_fn, config_file, tss_id, logger)
                     db.add_endpoint(tss_id, modins_fn, logger)
             # exports and reports
-            elif mi_root.tag in {r'{http://www.wldelft.nl/fews}timeSeriesExportRun', r'{http://www.wldelft.nl/fews}reports'}:
+            elif mi_root.tag in {r'{http://www.wldelft.nl/fews}timeSeriesExportRun', r'{http://www.wldelft.nl/fews}reports', r'{http://www.wldelft.nl/fews}exportArchiveModule'}:
                 logger.debug(mi_root.tag)
                 ord_nr = 0
                 for tsss in Helpers.find_element_recursive(mi_root, 'fews:timeSeriesSet', [], ns, logger):
