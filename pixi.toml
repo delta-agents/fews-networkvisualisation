@@ -21,4 +21,6 @@ streamlit_markdown = ">=1.1.0"
 [tasks]
 test = "pytest"
 start = { cmd = "streamlit run app/streamlit_app.py" } 
-docker = { cmd = "streamlit run app/streamlit_app.py --server.port=8501 --server.address=0.0.0.0" } 
+docker = { cmd = "streamlit run app/streamlit_app.py --server.port=8501 --server.address=0.0.0.0" } analyse_config = "python fewsvisualiser\\__main__.py analyse_config"
+explore_config = "python fewsvisualiser\\__main__.py explore_config"
+locset_analysis = "python fewsvisualiser\\__main__.py locset_analysis"
