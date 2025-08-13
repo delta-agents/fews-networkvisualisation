@@ -29,6 +29,6 @@ pixi install
 
 ```bash
 pixi run analyse_config {path_to_config} {path_to_db}
-# eg.g
+# e.g: 
 pixi run analyse_config  "..\FEWS Digiflow\Config" "db\digiflow.db3"
 ```
