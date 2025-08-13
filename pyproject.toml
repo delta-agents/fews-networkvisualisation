@@ -2,6 +2,9 @@
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[tool.hatch.version]
+path = "fewsvisualiser/__init__.py"
+
 [project]
 name = "fewsvisualiser"
 authors = [{ name = "Job Verkaik", email = "verkaik@hkv.nl" }]
