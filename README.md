@@ -1,8 +1,8 @@
-# FEWSVisualiser: Insights for optimized Delft-FEWS configurations.
+# FEWSVisualiser: Insights for optimized Delft-FEWS configurations
 
 A differerent approach to the analysis and visualisation of Delft-FEWS configuration
 
-This project is a successor of https://github.com/HKV-products-services/FEWS_Netwerkvisualisation
+This project is a successor of [FEWS_Netwerkvisualisation](https://github.com/HKV-products-services/FEWS_Netwerkvisualisation)
 
 HKV project
 RO1122.10.00 Herstructurering analyse netwerkvisualisatie
