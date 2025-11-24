@@ -97,7 +97,6 @@ class DbConfigVis:
         dll_moduleinstances_table = """CREATE TABLE moduleinstances (
                                     modin_id TEXT NOT NULL,
                                     name TEXT NOT NULL,
-                                    update_mrt INTEGER NOT NULL,
                                     CONSTRAINT PK_moduleinstances PRIMARY KEY (modin_id))"""
         cursor.execute(dll_moduleinstances_table)
         logger.info("moduleinstances table created")

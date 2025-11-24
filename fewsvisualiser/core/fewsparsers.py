@@ -2,6 +2,7 @@ import xml.etree.ElementTree as ET
 from fewsvisualiser.core.helpers import Helpers
 import copy
 import csv
+import re
 
 
 ns = {'fews': 'http://www.wldelft.nl/fews'}
@@ -137,7 +138,8 @@ class ModuleInstanceDescriptorParser:
         else:
             logger.debug("Parsing moduleInstanceDescriptorsCsvFile")
             moduleInstanceDescriptorsCsvFile = mid_csv.find('fews:file', ns).text
-            id_column = mid_csv.find('fews:id', ns).text
+            id_column_str = mid_csv.find('fews:id', ns).text
+            id_column = re.search(r"%(.+?)%", id_column_str).group(1)
 
             csv_path = config_root / "MapLayerFiles" / moduleInstanceDescriptorsCsvFile
             if csv_path.suffix != '.csv':
