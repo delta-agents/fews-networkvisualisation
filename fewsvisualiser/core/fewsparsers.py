@@ -141,7 +141,7 @@ class ModuleInstanceDescriptorParser:
 
             csv_path = config_root / "MapLayerFiles" / moduleInstanceDescriptorsCsvFile
             if csv_path.suffix != '.csv':
-                csv_path = config_root / "MapLayerFiles" / moduleInstanceDescriptorsCsvFile + '.csv'
+                csv_path = config_root / "MapLayerFiles" / (moduleInstanceDescriptorsCsvFile + '.csv')
 
             with open(csv_path, 'r') as fin:
                 dr = csv.DictReader(fin)
