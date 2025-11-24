@@ -101,6 +101,13 @@ class DbConfigVis:
         cursor.execute(dll_moduleinstances_table)
         logger.info("moduleinstances table created")
 
+        dll_moduleinstancesets_table = """CREATE TABLE moduleinstancesets (
+                                    set_id TEXT NOT NULL,
+                                    mid TEXT,
+                                    mip TEXT)"""
+        cursor.execute(dll_moduleinstancesets_table)
+        logger.info("moduleinstancesets table created")
+
         self.con.commit()
         logger.info("Database created")
 
@@ -248,6 +255,16 @@ class DbConfigVis:
             cursor = self.con.cursor()
             data = (mi_id, mi_name)
             insert_statement = """INSERT INTO 'moduleinstances' ('modin_id', 'name') VALUES (?, ?);"""
+            cursor.execute(insert_statement, data)
+            self.con.commit()
+        finally:
+            cursor.close()
+
+    def miset_insert(self, mis_id, mid, mip):
+        try:
+            cursor = self.con.cursor()
+            data = (mis_id, mid, mip)
+            insert_statement = """INSERT INTO 'moduleinstancesets' ('set_id', 'mid', 'mip') VALUES (?, ?, ?);"""
             cursor.execute(insert_statement, data)
             self.con.commit()
         finally:

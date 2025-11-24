@@ -151,6 +151,24 @@ class ModuleInstanceDescriptorParser:
                     db.mid_insert(i[id_column], i[id_column])
                     logger.debug("parse_moduleinstances_file: adding moduleInstanceDescriptor {i[id_column]}")
 
+class ModuleInstanceSetsParser:
+    def parse_moduleinstancesets_file(db, config_root, logger):
+        misets_path = config_root / "RegionConfigFiles/ModuleInstanceSets.xml"
+        if misets_path.exists():
+            logger.debug(f"Parsing ModuleInstanceSets")
+            misets_root = ET.parse(misets_path).getroot()
+            for mis in misets_root.findall('fews:moduleInstanceSet', ns):
+                mis_id = mis.attrib["id"]
+                for mi in mis.findall('fews:moduleInstanceId', ns):
+                    mid = mi.text
+                    db.miset_insert(mis_id, mid, None)
+                for mip in mis.findall('fews:moduleInstanceIdPattern', ns):
+                    mid_pat = mip.text
+                    db.miset_insert(mis_id, None, mid_pat)
+        else:
+            logger.debug(f"No ModuleInstanceSets file found")
+
+
 class Workflows_parser:
     @staticmethod
     def parse_workflow_descriptors(config_root, db, logger):
