@@ -94,6 +94,14 @@ class DbConfigVis:
         cursor.execute(dll_endpoints_table)
         logger.info("endpoints table created")
 
+        dll_moduleinstances_table = """CREATE TABLE moduleinstances (
+                                    modin_id TEXT NOT NULL,
+                                    name TEXT NOT NULL,
+                                    update_mrt INTEGER NOT NULL,
+                                    CONSTRAINT PK_moduleinstances PRIMARY KEY (modin_id))"""
+        cursor.execute(dll_moduleinstances_table)
+        logger.info("moduleinstances table created")
+
         self.con.commit()
         logger.info("Database created")
 
@@ -231,6 +239,16 @@ class DbConfigVis:
             cursor = self.con.cursor()
             data = (wf_id, wf_desc, wf_fn, cps_id)
             insert_statement = """INSERT INTO 'wfs' ('id','description','filename', 'props_set_id') VALUES (?, ?, ?, ?);"""
+            cursor.execute(insert_statement, data)
+            self.con.commit()
+        finally:
+            cursor.close()
+
+    def mid_insert(self, mi_id, mi_name):
+        try:
+            cursor = self.con.cursor()
+            data = (mi_id, mi_name)
+            insert_statement = """INSERT INTO 'moduleinstances' ('modin_id', 'name') VALUES (?, ?);"""
             cursor.execute(insert_statement, data)
             self.con.commit()
         finally:

@@ -1,6 +1,6 @@
 from pathlib import Path
 from fewsvisualiser.core.dbconfigvis import DbConfigVis
-from fewsvisualiser.core.fewsparsers import Workflows_parser, TimeseriesSetParser, Modins_parser, Endpoint_parsers, CoefficientSet_parser
+from fewsvisualiser.core.fewsparsers import Workflows_parser, TimeseriesSetParser, Modins_parser, Endpoint_parsers, CoefficientSet_parser, ModuleInstanceDescriptorParser
 from fewsvisualiser.core.helpers import setup_logging, delete_file
 
 
@@ -41,6 +41,8 @@ def analyse_config(croot, dbpath):
 
     # parsing TimeSteps
     TimeseriesSetParser.parse_timestep_id_file(config_root / "RegionConfigFiles/TimeSteps.xml", logger)
+    # parsing ModuleInstanceDescriptors
+    ModuleInstanceDescriptorParser.parse_moduleinstances_file(db, config_root, logger)
     # parsing filter files
     Endpoint_parsers.parse_endpoint(db, config_root / "RegionConfigFiles", 'filters', logger)
     # parsing displayGroups files

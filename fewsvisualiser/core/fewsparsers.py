@@ -1,6 +1,7 @@
 import xml.etree.ElementTree as ET
 from fewsvisualiser.core.helpers import Helpers
 import copy
+import csv
 
 
 ns = {'fews': 'http://www.wldelft.nl/fews'}
@@ -114,6 +115,39 @@ class TimeseriesSetParser:
             description = ""
 
         return (moduleInstanceId, valueType, parameterId, qualifiers, timeSeriesType, timestepstring, aggregationString, description)
+
+class ModuleInstanceDescriptorParser:
+    @staticmethod
+    def parse_moduleinstances_file(db, config_root, logger):
+        mid_path = config_root / "RegionConfigFiles/ModuleInstanceDescriptors.xml" 
+        logger.debug(f"Parsing {mid_path}")
+        mid_root = ET.parse(mid_path).getroot()
+
+        mid_csv = mid_root.find('fews:moduleInstanceDescriptorsCsvFile', ns)
+        if mid_csv is None:
+            for mid in mid_root.findall('fews:moduleInstanceDescriptor', ns):
+                mi_id = mid.attrib["id"]
+                try:
+                    mi_name = mid.attrib["name"]
+                except KeyError:
+                    mi_name = mi_id
+
+                db.mid_insert(mi_id, mi_name)
+                logger.debug("parse_moduleinstances_file: adding moduleInstanceDescriptor {mi_id}")
+        else:
+            logger.debug("Parsing moduleInstanceDescriptorsCsvFile")
+            moduleInstanceDescriptorsCsvFile = mid_csv.find('fews:file', ns).text
+            id_column = mid_csv.find('fews:id', ns).text
+
+            csv_path = config_root / "MapLayerFiles" / moduleInstanceDescriptorsCsvFile
+            if csv_path.suffix != '.csv':
+                csv_path = config_root / "MapLayerFiles" / moduleInstanceDescriptorsCsvFile + '.csv'
+
+            with open(csv_path, 'r') as fin:
+                dr = csv.DictReader(fin)
+                for i in dr:
+                    db.mid_insert(i[id_column], i[id_column])
+                    logger.debug("parse_moduleinstances_file: adding moduleInstanceDescriptor {i[id_column]}")
 
 class Workflows_parser:
     @staticmethod
