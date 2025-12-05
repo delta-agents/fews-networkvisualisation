@@ -5,6 +5,7 @@ test*.ipynb
 /.vscode/launch.json
 /config
 .pixi
+**.ipynb_checkpoints
 .DS_Store
 db/*.log
 notebooks/*
