@@ -1,9 +1,10 @@
 {
-    "python.defaultInterpreterPath": "C:/ProgramData/Miniconda3/python.exe",
+    "python.defaultInterpreterPath": ".pixi/envs/default3/python.exe",
     "python.testing.pytestArgs": [
         "tests"
     ],
     "python.testing.unittestEnabled": false,
     "python.testing.pytestEnabled": true,
-    "search.useGlobalIgnoreFiles": true
+    "search.useGlobalIgnoreFiles": true,
+    "python-envs.defaultEnvManager": "ms-python.python:system"
 }

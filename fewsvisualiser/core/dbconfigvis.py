@@ -25,7 +25,7 @@ class DbConfigVis:
         dll_call_stacks_table = """CREATE TABLE call_stacks (
                 id INTEGER NOT NULL,
                 wf_id TEXT NOT NULL,
-                desc TEXT,
+                description TEXT,
                 wffn TEXT NOT NULL,
                 parent_id INTEGER,
                 props_set_id INTEGER,
@@ -40,6 +40,7 @@ class DbConfigVis:
                 call_stack_id INTEGER NOT NULL,
                 modins TEXT NOT NULL,
                 props_set_id INTEGER,
+                description TEXT,
                 CONSTRAINT PK_modins_calls PRIMARY KEY (id, call_stack_id),
                 FOREIGN KEY(props_set_id) REFERENCES props_sets(id),
                 FOREIGN KEY(call_stack_id) REFERENCES call_stacks(id))"""
@@ -62,12 +63,13 @@ class DbConfigVis:
         logger.info("ts_sets table created")
 
         dll_trafos_table = """CREATE TABLE trafos (
-                                    id INTEGER NOT NULL,
+                                    idx INTEGER NOT NULL,
                                     mic_id INTEGER NOT NULL,
                                     ord_nr INTEGER NOT NULL,
-                                    desc TEXT NOT NULL,
+                                    trafo_id TEXT NOT NULL,
+                                    description TEXT,
                                     config_file TEXT NOT NULL,
-                                    CONSTRAINT PK_trafos PRIMARY KEY (id),
+                                    CONSTRAINT PK_trafos PRIMARY KEY (idx),
                                     UNIQUE(mic_id, ord_nr),
                                     FOREIGN KEY(mic_id) REFERENCES modins_calls(id)
                                     )"""
@@ -75,11 +77,11 @@ class DbConfigVis:
         logger.info("trafos table created")
 
         dll_links_table = """CREATE TABLE links (
-                                    trafo_id INTEGER NOT NULL,
+                                    trafo_idx INTEGER NOT NULL,
                                     tss_id INTEGER NOT NULL,
                                     inout TEXT,
-                                    UNIQUE(trafo_id, tss_id, inout),
-                                    FOREIGN KEY(trafo_id) REFERENCES trafos(id),
+                                    UNIQUE(trafo_idx, tss_id, inout),
+                                    FOREIGN KEY(trafo_idx) REFERENCES trafos(idx),
                                     FOREIGN KEY(tss_id) REFERENCES ts_sets(id)
                                     )"""
         cursor.execute(dll_links_table)
@@ -87,8 +89,8 @@ class DbConfigVis:
 
         dll_endpoints_table = """CREATE TABLE endpoints (
                                     tss_id INTEGER NOT NULL,
-                                    desc TEXT NOT NULL,
-                                    CONSTRAINT PK_endpoints PRIMARY KEY (tss_id, desc),
+                                    description TEXT NOT NULL,
+                                    CONSTRAINT PK_endpoints PRIMARY KEY (tss_id, description),
                                     FOREIGN KEY(tss_id) REFERENCES ts_sets(id)
                                     )"""
         cursor.execute(dll_endpoints_table)
@@ -119,8 +121,8 @@ class DbConfigVis:
         row = self.con.execute("SELECT count(*) FROM modins_calls").fetchone()
         return row[0]
 
-    def get_max_trafos_id(self) -> int:
-        row = self.con.execute("SELECT MAX(id) FROM trafos").fetchone()
+    def get_max_trafos_idx(self) -> int:
+        row = self.con.execute("SELECT MAX(idx) FROM trafos").fetchone()
         return int(row[0]) if row[0] else 0
 
     def get_max_call_stacks_id(self) -> int:
@@ -138,7 +140,7 @@ class DbConfigVis:
     def get_call_stack_from_wfid(self, wf_id, logger):
         try:
             cursor = self.con.cursor()
-            cs = self.con.execute("SELECT id, desc, wffn, props_set_id FROM call_stacks WHERE wf_id =:wf_id", {"wf_id": wf_id}).fetchone()
+            cs = self.con.execute("SELECT id, description, wffn, props_set_id FROM call_stacks WHERE wf_id =:wf_id", {"wf_id": wf_id}).fetchone()
         except sqlite3.Error as error:
             logger.error(error)
         finally:
@@ -152,31 +154,32 @@ class DbConfigVis:
             logger.error(error)
             raise
 
-    def get_trafo_id(self, mic_id, ord_nr, desc, config_file, logger):
+    def get_trafo_index(self, mic_id, ord_nr, trafo_id, trafo_description, config_file, logger):
         try:
             cursor = self.con.cursor()
             # find trafo_id
-            trafo_row = self.con.execute("SELECT id FROM trafos WHERE mic_id=:mic_id AND ord_nr=:ord_nr", {"mic_id": mic_id, "ord_nr": ord_nr}).fetchone()
+            trafo_row = self.con.execute("SELECT idx FROM trafos WHERE mic_id=:mic_id AND ord_nr=:ord_nr", {"mic_id": mic_id, "ord_nr": ord_nr}).fetchone()
             if trafo_row is None:
-                trafo_id = self.get_max_trafos_id() + 1
-                insert_statement = """INSERT INTO 'trafos' ('id','mic_id','ord_nr','desc', 'config_file') VALUES (?, ?, ?, ?, ?);"""
-                cursor.execute(insert_statement, (trafo_id, mic_id, ord_nr, desc, config_file))
+                idx = self.get_max_trafos_idx() + 1
+                insert_statement = """INSERT INTO 'trafos' ('idx','mic_id','ord_nr','trafo_id','description','config_file') VALUES (?, ?, ?, ?, ?, ?);"""
+                cursor.execute(insert_statement, (idx, mic_id, ord_nr, trafo_id, trafo_description, config_file))
                 self.con.commit()
             else:
-                trafo_id = trafo_row[0]
+                idx = trafo_row[0]
         except sqlite3.Error as error:
             logger.error(error)
+            idx = None
             raise
         finally:
             cursor.close()
-            return trafo_id
+            return idx
 
-    def add_inoutput(self, mic_id, ord_nr, desc, config_file, tss_id, direction, logger):
-        trafo_id = self.get_trafo_id(mic_id, ord_nr, desc, config_file, logger)
+    def add_inoutput(self, mic_id, ord_nr, trafo_id, trafo_description, config_file, tss_id, direction, logger):
+        trafo_idx = self.get_trafo_index(mic_id, ord_nr, trafo_id, trafo_description, config_file, logger)
         try:
             cursor = self.con.cursor()
-            insert_statement = """INSERT INTO 'links' ('trafo_id','tss_id','inout') VALUES (?, ?, ?);"""
-            cursor.execute(insert_statement, (trafo_id, tss_id, direction))
+            insert_statement = """INSERT INTO 'links' ('trafo_idx','tss_id','inout') VALUES (?, ?, ?);"""
+            cursor.execute(insert_statement, (trafo_idx, tss_id, direction))
             self.con.commit()
         except sqlite3.IntegrityError as error:
             pass
@@ -186,11 +189,11 @@ class DbConfigVis:
         finally:
             cursor.close()
 
-    def add_input(self, mic_id, ord_nr, desc, config_file, tss_id, logger):
-        self.add_inoutput(mic_id, ord_nr, desc, config_file, tss_id, 'in', logger)
+    def add_input(self, mic_id, ord_nr, trafo_id, description, config_file, tss_id, logger):
+        self.add_inoutput(mic_id, ord_nr, trafo_id, description, config_file, tss_id, 'in', logger)
 
-    def add_output(self, mic_id, ord_nr, desc, config_file, tss_id, logger):
-        self.add_inoutput(mic_id, ord_nr, desc, config_file, tss_id, 'out', logger)
+    def add_output(self, mic_id, ord_nr, trafo_id, description, config_file, tss_id, logger):
+        self.add_inoutput(mic_id, ord_nr, trafo_id, description, config_file, tss_id, 'out', logger)
 
     def insert_props_set(self, properties_set, logger) -> int:
         if not properties_set:
@@ -221,20 +224,19 @@ class DbConfigVis:
             ccs_id = self.get_max_call_stacks_id() + 1
             # create a new call stack
             data = (ccs_id, wfid, desc, wffn, parent, psid)
-            insert_statement = """INSERT INTO 'call_stacks' ('id','wf_id','desc','wffn','parent_id','props_set_id') VALUES (?,?,?,?,?,?);"""
+            insert_statement = """INSERT INTO 'call_stacks' ('id','wf_id','description','wffn','parent_id','props_set_id') VALUES (?,?,?,?,?,?);"""
             cursor.execute(insert_statement, data)
             self.con.commit()
         finally:
             cursor.close()
             return ccs_id
         
-        
-    def add_modins_calls(self, modfn, csid, psid):
+    def add_modins_calls(self, modfn, csid, psid, desc):
         try:
             cursor = self.con.cursor()
             mic_id = self.get_max_modins_calls_id() + 1
-            data = (mic_id, csid, modfn, psid)
-            insert_statement = """INSERT INTO 'modins_calls' ('id', 'call_stack_id', 'modins', 'props_set_id') VALUES (?, ?, ?, ?);"""
+            data = (mic_id, csid, modfn, psid, desc)
+            insert_statement = """INSERT INTO 'modins_calls' ('id', 'call_stack_id', 'modins', 'props_set_id', 'description') VALUES (?, ?, ?, ?, ?);"""
             cursor.execute(insert_statement, data)
             self.con.commit()
         finally:
@@ -336,7 +338,7 @@ class DbConfigVis:
     def add_endpoint(self, tss_id, desc, logger):
         try:
             cursor = self.con.cursor()
-            insert_statement = """INSERT INTO 'endpoints' ('tss_id','desc') VALUES (?, ?);"""
+            insert_statement = """INSERT INTO 'endpoints' ('tss_id','description') VALUES (?, ?);"""
             cursor.execute(insert_statement, (tss_id, desc))
             self.con.commit()
         except sqlite3.IntegrityError as error:
