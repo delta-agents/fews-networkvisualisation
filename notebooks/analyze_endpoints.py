@@ -55,9 +55,9 @@ def find_endpoint_sources(conn, endpoint_tss_id):
         DataFrame with transformation information
     """
     query = """
-    SELECT t.id, t.desc, m.modins, c.wf_id, c.desc as workflow_desc
+    SELECT t.idx, t.description, m.modins, c.wf_id, c.desc as workflow_desc
     FROM trafos t
-    JOIN links l ON t.id = l.trafo_id
+    JOIN links l ON t.idx = l.trafo_idx
     JOIN modins_calls m ON t.mic_id = m.id
     JOIN call_stacks c ON m.call_stack_id = c.id
     WHERE l.tss_id = ? AND l.inout = 'out'
