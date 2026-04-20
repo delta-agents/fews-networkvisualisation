@@ -271,7 +271,10 @@ class Workflows_parser:
     @staticmethod
     def get_props(root, props):
         new_props = copy.deepcopy(props)
-        [new_props.update({prop.attrib["key"]: prop.attrib["value"]}) for prop in root.find('fews:properties', ns)]
+        try:
+            [new_props.update({prop.attrib["key"]: prop.attrib["value"]}) for prop in root.find('fews:properties', ns)]
+        except Exception as e:
+            pass
         return new_props
 
     @staticmethod
