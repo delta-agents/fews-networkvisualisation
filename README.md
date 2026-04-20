@@ -7,6 +7,13 @@ This project is a successor of [FEWS_Netwerkvisualisation](https://github.com/HK
 HKV project
 RO1122.10.00 Herstructurering analyse netwerkvisualisatie
 
+## Talk with fews
+
+> [!CAUTION]
+> De eerste ontiwikkelingen van `talk with FEWS` waren in deze repo onder `/talkwithfews`.
+> Dit is echter losgetrokken, de actuele repo is: ![hier](https://github.com/HKV-products-services/talk-with-fews) te vinden. 
+> Actiepunt: later volledig lostrekken.
+
 ## aantekeningen
 
 ![Config Vis Datamodel](ConfigVisDatamodel.png)

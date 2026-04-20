@@ -145,7 +145,7 @@ class DbConfigVis:
             logger.error(error)
         finally:
             cursor.close()
-            return cs
+        return cs
 
     def get_tss(self, tss_id, logger):
         try:
@@ -172,7 +172,7 @@ class DbConfigVis:
             raise
         finally:
             cursor.close()
-            return idx
+        return idx
 
     def add_inoutput(self, mic_id, ord_nr, trafo_id, trafo_description, config_file, tss_id, direction, logger):
         trafo_idx = self.get_trafo_index(mic_id, ord_nr, trafo_id, trafo_description, config_file, logger)
@@ -215,7 +215,7 @@ class DbConfigVis:
             self.con.commit()
         finally:
             cursor.close()
-            return new_ps_id
+        return new_ps_id
 
 
     def add_call_stack(self, wfid, desc, wffn, parent, psid) -> int:
@@ -229,7 +229,7 @@ class DbConfigVis:
             self.con.commit()
         finally:
             cursor.close()
-            return ccs_id
+        return ccs_id
         
     def add_modins_calls(self, modfn, csid, psid, desc):
         try:
@@ -252,13 +252,17 @@ class DbConfigVis:
         finally:
             cursor.close()
 
-    def mid_insert(self, mi_id, mi_name):
+    def mid_insert(self, mi_id, mi_name, logger):
         try:
             cursor = self.con.cursor()
             data = (mi_id, mi_name)
             insert_statement = """INSERT INTO 'moduleinstances' ('modin_id', 'name') VALUES (?, ?);"""
             cursor.execute(insert_statement, data)
             self.con.commit()
+        except sqlite3.IntegrityError('UNIQUE constraint failed: moduleinstances.modin_id') as error:
+            logger.error(error)
+            logger.warning("Module instance already exists: {}: {}".format(mi_id, mi_name))
+            logger.error('Check for duplicate modules instances in RegionConfigFiles/ModuleInstanceDescriptors.xml')
         finally:
             cursor.close()
 
@@ -305,7 +309,7 @@ class DbConfigVis:
             logger.error("Error add_tts: ", error)
         finally:
             cursor.close()
-            return tss_id
+        return tss_id
 
     def get_tss_id(self, tss, logger):
         try:
@@ -332,8 +336,7 @@ class DbConfigVis:
         except sqlite3.Error as error:
             logger.error("Error get_tss_id: ", error)
             raise
-        finally:
-            return tss_id
+        return tss_id
 
     def add_endpoint(self, tss_id, desc, logger):
         try:
