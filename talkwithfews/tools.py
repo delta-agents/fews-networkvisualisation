@@ -111,7 +111,7 @@ async def search_workflows(ctx: RunContext[Deps], input: WorkflowSearchInput) ->
         WorkflowSearchOutput: Matching workflows with formatted markdown content
     """
     query = f"""
-    SELECT cs.id, cs.wf_id, cs.desc, 
+    SELECT cs.id, cs.wf_id, cs.description, 
            GROUP_CONCAT(mc.id) as module_config_ids
     FROM call_stacks cs
     LEFT JOIN modins_calls mc ON cs.id = mc.call_stack_id
@@ -168,9 +168,9 @@ async def get_workflow_details(ctx: RunContext[Deps], input: WorkflowDetailsInpu
     """
     # Get workflow details, module calls, and their transformations
     query = f"""
-    SELECT cs.id, cs.wf_id, cs.desc, cs.wffn, 
+    SELECT cs.id, cs.wf_id, cs.description, cs.wffn, 
            mc.id as mic_id, mc.modins,
-           t.id as trafo_id, t.desc as trafo_desc, t.ord_nr
+           t.idx as t.trafo_idx, t.description as trafo_desc, t.ord_nr
     FROM call_stacks cs
     LEFT JOIN modins_calls mc ON cs.id = mc.call_stack_id
     LEFT JOIN trafos t ON mc.id = t.mic_id
@@ -204,9 +204,9 @@ async def get_workflow_details(ctx: RunContext[Deps], input: WorkflowDetailsInpu
                     'transformations': []
                 }
             
-            if row['trafo_id']:  # Add transformation if it exists
+            if row['trafo_idx']:  # Add transformation if it exists
                 workflow_data[workflow_id]['module_calls'][row['mic_id']]['transformations'].append({
-                    'id': row['trafo_id'],
+                    'id': row['trafo_idx'],
                     'desc': row['trafo_desc'],
                     'ord_nr': row['ord_nr']
                 })
@@ -436,16 +436,16 @@ async def describe_timeseries(ctx: RunContext[Deps], input: DescribeTimeSeriesIn
     # Get transformations if requested
     if input.include_transformations:
         transformations_query = f"""
-        SELECT l.inout, t.id as trafo_id, t.desc as trafo_desc, t.ord_nr,
-               cs.id as workflow_id, cs.wf_id as workflow_name, cs.desc as workflow_desc,
+        SELECT l.inout, t.idx as trafo_idx, t.description as trafo_desc, t.ord_nr,
+               cs.id as workflow_id, cs.wf_id as workflow_name, cs.description as workflow_desc,
                linked_ts.modins as linked_tss_modins, linked_ts.parid as linked_tss_parid, linked_ts.qualifiers as linked_tss_qualifiers,
                mc.modins as module_config,
                mc.id as module_config_id
         FROM links l
-        JOIN trafos t ON l.trafo_id = t.id
+        JOIN trafos t ON l.trafo_idx = t.idx
         JOIN modins_calls mc ON t.mic_id = mc.id
         JOIN call_stacks cs ON mc.call_stack_id = cs.id
-        JOIN links linked_l ON t.id = linked_l.trafo_id 
+        JOIN links linked_l ON t.idx = linked_l.trafo_idx 
             AND linked_l.tss_id != {input.timeseries_id}
         JOIN ts_sets linked_ts ON linked_l.tss_id = linked_ts.id
         WHERE l.tss_id = {input.timeseries_id}
@@ -510,18 +510,18 @@ async def search_transformations(
     # Build the base query
     query = """
     SELECT DISTINCT
-        t.id,
-        t.desc,
+        t.idx,
+        t.description,
         t.ord_nr,
         t.mic_id,
         mc.modins,
         cs.id as workflow_id,
         cs.wf_id as workflow_name,
-        cs.desc as workflow_desc
+        cs.description as workflow_desc
     FROM trafos t
     JOIN modins_calls mc ON t.mic_id = mc.id
     JOIN call_stacks cs ON mc.call_stack_id = cs.id
-    WHERE t.desc LIKE ?
+    WHERE t.description LIKE ?
     """
     params = [f"%{input_data.description_pattern}%"]
     
@@ -587,13 +587,13 @@ async def get_transformation_details(ctx: RunContext[Deps], input: Transformatio
     """
     # Get transformation details and time series links
     query = f"""
-    SELECT t.id, t.desc, t.ord_nr, t.config_file, t.mic_id, mc.modins,
+    SELECT t.idx, t.description, t.ord_nr, t.config_file, t.mic_id, mc.modins,
            l.inout, ts.id as tss_id
     FROM trafos t
     JOIN modins_calls mc ON t.mic_id = mc.id
-    LEFT JOIN links l ON t.id = l.trafo_id
+    LEFT JOIN links l ON t.idx = l.trafo_idx
     LEFT JOIN ts_sets ts ON l.tss_id = ts.id
-    WHERE t.id = {input.transformation_id}
+    WHERE t.idx = {input.transformation_id}
     ORDER BY l.inout, ts.id
     """
     
@@ -605,11 +605,11 @@ async def get_transformation_details(ctx: RunContext[Deps], input: Transformatio
     # Group time series links by transformation
     transformation_data = {}
     for row in result.results:
-        trafo_id = row['id']
-        if trafo_id not in transformation_data:
-            transformation_data[trafo_id] = {
-                'id': row['id'],
-                'desc': row['desc'],
+        trafo_idx = row['idx']
+        if trafo_idx not in transformation_data:
+            transformation_data[trafo_idx] = {
+                'id': row['idx'],
+                'desc': row['description'],
                 'ord_nr': row['ord_nr'],
                 'config_file': row['config_file'],
                 'mic_id': row['mic_id'],
@@ -618,7 +618,7 @@ async def get_transformation_details(ctx: RunContext[Deps], input: Transformatio
             }
         
         if row['tss_id']:  # Only add if there's a time series link
-            transformation_data[trafo_id]['time_series_links'].append({
+            transformation_data[trafo_idx]['time_series_links'].append({
                 'inout': row['inout'],
                 'tss_id': row['tss_id']
             })
@@ -713,12 +713,12 @@ async def analyze_dependencies(ctx: RunContext[Deps], input: DependencyAnalysisI
         WITH producers AS (
             -- Find transformations that produce this time series
             SELECT 
-                t.id as trafo_id, t.desc as trafo_desc, t.ord_nr,
+                t.idx as trafo_idx, t.description as trafo_desc, t.ord_nr,
                 mc.id as module_config_id, mc.modins as module_config,
-                cs.id as workflow_id, cs.wf_id as workflow_name, cs.desc as workflow_desc,
+                cs.id as workflow_id, cs.wf_id as workflow_name, cs.description as workflow_desc,
                 'out' as link_type
             FROM trafos t
-            JOIN links l ON t.id = l.trafo_id
+            JOIN links l ON t.idx = l.trafo_idx
             JOIN modins_calls mc ON t.mic_id = mc.id
             JOIN call_stacks cs ON mc.call_stack_id = cs.id
             WHERE l.tss_id = {input.entity_id} AND l.inout = 'out'
@@ -726,12 +726,12 @@ async def analyze_dependencies(ctx: RunContext[Deps], input: DependencyAnalysisI
         consumers AS (
             -- Find transformations that consume this time series
             SELECT 
-                t.id as trafo_id, t.desc as trafo_desc, t.ord_nr,
+                t.idx as trafo_idx, t.description as trafo_desc, t.ord_nr,
                 mc.id as module_config_id, mc.modins as module_config,
-                cs.id as workflow_id, cs.wf_id as workflow_name, cs.desc as workflow_desc,
+                cs.id as workflow_id, cs.wf_id as workflow_name, cs.description as workflow_desc,
                 'in' as link_type
             FROM trafos t
-            JOIN links l ON t.id = l.trafo_id
+            JOIN links l ON t.idx = l.trafo_idx
             JOIN modins_calls mc ON t.mic_id = mc.id
             JOIN call_stacks cs ON mc.call_stack_id = cs.id
             WHERE l.tss_id = {input.entity_id} AND l.inout = 'in'
@@ -751,7 +751,7 @@ async def analyze_dependencies(ctx: RunContext[Deps], input: DependencyAnalysisI
                 'in' as link_type
             FROM ts_sets ts
             JOIN links l ON ts.id = l.tss_id
-            WHERE l.trafo_id = {input.entity_id} AND l.inout = 'in'
+            WHERE l.trafo_idx = {input.entity_id} AND l.inout = 'in'
         ),
         outputs AS (
             -- Find output time series
@@ -760,7 +760,7 @@ async def analyze_dependencies(ctx: RunContext[Deps], input: DependencyAnalysisI
                 'out' as link_type
             FROM ts_sets ts
             JOIN links l ON ts.id = l.tss_id
-            WHERE l.trafo_id = {input.entity_id} AND l.inout = 'out'
+            WHERE l.trafo_idx = {input.entity_id} AND l.inout = 'out'
         )
         SELECT * FROM inputs
         UNION ALL
@@ -773,7 +773,7 @@ async def analyze_dependencies(ctx: RunContext[Deps], input: DependencyAnalysisI
         WITH callers AS (
             -- Find workflows that call this workflow
             SELECT 
-                parent.id, parent.wf_id, parent.desc,
+                parent.id, parent.wf_id, parent.description,
                 'in' as link_type
             FROM call_stacks parent
             JOIN call_stacks child ON child.parent_id = parent.id
@@ -782,7 +782,7 @@ async def analyze_dependencies(ctx: RunContext[Deps], input: DependencyAnalysisI
         callees AS (
             -- Find workflows called by this workflow
             SELECT 
-                child.id, child.wf_id, child.desc,
+                child.id, child.wf_id, child.description,
                 'out' as link_type
             FROM call_stacks child
             WHERE child.parent_id = {input.entity_id}
@@ -878,13 +878,13 @@ async def find_workflow_call_hierarchy(ctx: RunContext[Deps], input: dict) -> SQ
     
     query = f"""
     WITH RECURSIVE workflow_hierarchy AS (
-        SELECT id, wf_id, desc, parent_id, 0 AS level
+        SELECT id, wf_id, description, parent_id, 0 AS level
         FROM call_stacks
         WHERE id = {root_workflow_id}
         
         UNION ALL
         
-        SELECT cs.id, cs.wf_id, cs.desc, cs.parent_id, wh.level + 1
+        SELECT cs.id, cs.wf_id, cs.description, cs.parent_id, wh.level + 1
         FROM call_stacks cs
         JOIN workflow_hierarchy wh ON cs.parent_id = wh.id
     )
@@ -981,12 +981,12 @@ async def analyze_dead_points(ctx: RunContext[Deps], input: dict = None) -> Dead
             )
         )
         SELECT dp.*, 
-               t.id as trafo_id, t.desc as trafo_desc,
+               t.idx as trafo_idx, t.description as trafo_desc,
                mc.id as module_config_id, mc.modins as module_config,
                cs.id as workflow_id, cs.wf_id as workflow_name
         FROM dead_points dp
         LEFT JOIN links l ON dp.id = l.tss_id AND l.inout = 'out'
-        LEFT JOIN trafos t ON l.trafo_id = t.id
+        LEFT JOIN trafos t ON l.trafo_idx = t.idx
         LEFT JOIN modins_calls mc ON t.mic_id = mc.id
         LEFT JOIN call_stacks cs ON mc.call_stack_id = cs.id
         ORDER BY dp.modins, dp.parid
@@ -1045,11 +1045,11 @@ async def analyze_dead_points(ctx: RunContext[Deps], input: dict = None) -> Dead
             id_list = ", ".join(str(id) for id in dead_point_ids)
             
             producers_query = f"""
-            SELECT l.tss_id, t.id AS trafo_id, t.desc AS trafo_desc, 
+            SELECT l.tss_id, t.idx AS trafo_idx, t.description AS trafo_desc, 
                   m.modins AS module_instance, m.id as module_config_id,
                   c.wf_id AS workflow_id
             FROM links l
-            JOIN trafos t ON l.trafo_id = t.id
+            JOIN trafos t ON l.trafo_idx = t.idx
             JOIN modins_calls m ON t.mic_id = m.id
             JOIN call_stacks c ON m.call_stack_id = c.id
             WHERE l.tss_id IN ({id_list})
@@ -1067,7 +1067,7 @@ async def analyze_dead_points(ctx: RunContext[Deps], input: dict = None) -> Dead
                     producers[tss_id].append(
                         DeadPointProducer(
                             tss_id=row["tss_id"],
-                            trafo_id=row["trafo_id"],
+                            trafo_idx=row["trafo_idx"],
                             trafo_desc=row["trafo_desc"],
                             module_instance=row["module_instance"],
                             workflow_id=row["workflow_id"]
@@ -1293,22 +1293,22 @@ async def visualize_graph(
             for trans in time_series.transformations:
                 # Add transformation node
                 trafo_label = f"{trans.module_config}|{trans.trafo_desc}"
-                if add_node("transformation", trans.trafo_id, trafo_label, {"order": str(trans.ord_nr)}, level + 1):
+                if add_node("transformation", trans.trafo_idx, trafo_label, {"order": str(trans.ord_nr)}, level + 1):
                     # Add edge from time series to transformation
-                    add_edge(tss_id, trans.trafo_id, "used_by", f"in {trans.module_config}")
+                    add_edge(tss_id, trans.trafo_idx, "used_by", f"in {trans.module_config}")
                     
                     # Get linked time series
                     if trans.linked_tss_modins:
                         linked_label = f"{trans.linked_tss_modins}|{trans.linked_tss_parid}|{trans.linked_tss_qualifiers}"
                         if add_node("timeseries", 0, linked_label, {}, level + 2):  # ID 0 for linked time series
-                            add_edge(trans.trafo_id, 0, "produces", f"out {trans.module_config}")
+                            add_edge(trans.trafo_idx, 0, "produces", f"out {trans.module_config}")
         
         return True
     
-    async def get_transformation_node(trafo_id: int, level: int = 0) -> bool:
+    async def get_transformation_node(trafo_idx: int, level: int = 0) -> bool:
         """Get transformation node and its relationships using get_transformation_details tool."""
         # Get transformation details
-        trafo_result = await get_transformation_details(ctx, TransformationDetailsInput(transformation_id=trafo_id))
+        trafo_result = await get_transformation_details(ctx, TransformationDetailsInput(transformation_id=trafo_idx))
         if not trafo_result.results:
             return False
             

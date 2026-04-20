@@ -133,7 +133,7 @@ class ModuleInstanceDescriptorParser:
                 except KeyError:
                     mi_name = mi_id
 
-                db.mid_insert(mi_id, mi_name)
+                db.mid_insert(mi_id, mi_name, logger)
                 logger.debug("parse_moduleinstances_file: adding moduleInstanceDescriptor {mi_id}")
         else:
             logger.debug("Parsing moduleInstanceDescriptorsCsvFile")
@@ -148,7 +148,7 @@ class ModuleInstanceDescriptorParser:
             with open(csv_path, 'r') as fin:
                 dr = csv.DictReader(fin)
                 for i in dr:
-                    db.mid_insert(i[id_column], i[id_column])
+                    db.mid_insert(i[id_column], i[id_column], logger)
                     logger.debug("parse_moduleinstances_file: adding moduleInstanceDescriptor {i[id_column]}")
 
 class ModuleInstanceSetsParser:
@@ -273,8 +273,9 @@ class Workflows_parser:
         new_props = copy.deepcopy(props)
         try:
             [new_props.update({prop.attrib["key"]: prop.attrib["value"]}) for prop in root.find('fews:properties', ns)]
-        finally:
-            return new_props
+        except Exception as e:
+            pass
+        return new_props
 
     @staticmethod
     def get_path_of_workflowfile(croot, wffn):
