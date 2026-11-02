@@ -375,6 +375,12 @@ class Modins_parser:
 
             logger.info(f"{i_call_stacks}/{n_modins_calls}: {modins_fn}; props -> {props}")
             i_call_stacks = i_call_stacks + 1
+            if '$' in modins_fn:
+                for prop in props:
+                    if f'${prop}$' in modins_fn:
+                        modins_pre = modins_fn
+                        modins_fn = modins_fn.replace(f'${prop}$', props[prop])
+                        logger.warning(f"Replacing property {prop} in modins_fn: {modins_pre} -> {modins_fn}")
 
             mi_file_path = Modins_parser.get_path_of_modinsfile(config_root, modins_fn)
             config_file = (mi_file_path.as_posix()).replace(config_root.as_posix(), "")
