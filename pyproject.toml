@@ -20,9 +20,9 @@ description = "FEWSVisualiser: Insights for optimized Delft-FEWS configurations.
 readme = "README.md"
 keywords = ["delft-fews", "declarative", "configuration", "insight"]
 requires-python = ">=3.8"
+license = {text = "GNU-GPL V3"}
 dynamic = ["version"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: BSD License"
 ]
