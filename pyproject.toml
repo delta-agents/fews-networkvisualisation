@@ -11,10 +11,10 @@ packages = ["fewsvisualiser"]
 [project]
 name = "fewsvisualiser"
 authors = [
-  { name = "Job Verkaik",
+  { name = "Job Verkaik"},
   { name = "Mattijn van Hoek"},
   { name = "David Haasnoot"},
-}]
+]
 dependencies = ["fire"]
 description = "FEWSVisualiser: Insights for optimized Delft-FEWS configurations."
 readme = "README.md"
