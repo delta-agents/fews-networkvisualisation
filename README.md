@@ -2,6 +2,14 @@
 
 A differerent approach to the analysis and visualisation of Delft-FEWS configuration
 
+## Installing PyPi
+
+`pip install fewsvisualiser`
+
+Running:
+
+`python -m fewsvisualiser analyse_config '../Config' 'Analysed_config.db3'`
+
 ## Data model
 
 ![Config Vis Datamodel](https://github.com/delta-agents/fews-networkvisualisation/blob/main/ConfigVisDatamodel.png?raw=true)
@@ -33,7 +41,7 @@ curl -fsSL https://pixi.sh/install.sh | bash
 With the `Pixi` command in powershell install the python environment:
 
 ```bash
- cd ../python_package_template
+ cd ../fews-networkvisualisation
  pixi install
 ```
 
