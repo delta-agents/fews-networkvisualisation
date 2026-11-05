@@ -5,9 +5,16 @@ build-backend = "hatchling.build"
 [tool.hatch.version]
 path = "fewsvisualiser/__init__.py"
 
+[tool.hatch.build.targets.wheel]
+packages = ["fewsvisualiser"]
+
 [project]
 name = "fewsvisualiser"
-authors = [{ name = "Job Verkaik", email = "verkaik@hkv.nl" }]
+authors = [
+  { name = "Job Verkaik",
+  { name = "Mattijn van Hoek"},
+  { name = "David Haasnoot"},
+}]
 dependencies = ["fire"]
 description = "FEWSVisualiser: Insights for optimized Delft-FEWS configurations."
 readme = "README.md"
@@ -19,3 +26,6 @@ classifiers = [
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: BSD License"
 ]
+
+[project.urls]
+Source = "https://github.com/delta-agents/fews-networkvisualisation"
