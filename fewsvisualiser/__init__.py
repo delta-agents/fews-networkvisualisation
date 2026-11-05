@@ -1,4 +1,4 @@
-__version__ = "1.0.1"
+__version__ = "1.0.2"
 
 from fewsvisualiser.analyse import analyse_config
 from fewsvisualiser.explore import explore_config
