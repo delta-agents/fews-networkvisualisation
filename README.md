@@ -2,33 +2,44 @@
 
 A differerent approach to the analysis and visualisation of Delft-FEWS configuration
 
-This project is a successor of [FEWS_Netwerkvisualisation](https://github.com/HKV-products-services/FEWS_Netwerkvisualisation)
+## Data model
 
-HKV project
-RO1122.10.00 Herstructurering analyse netwerkvisualisatie
+![Config Vis Datamodel](https://github.com/delta-agents/fews-networkvisualisation/blob/main/ConfigVisDatamodel.png?raw=true)
 
-## Talk with fews
+## Development
 
-> [!CAUTION]
-> De eerste ontiwikkelingen van `talk with FEWS` waren in deze repo onder `/talkwithfews`.
-> Dit is echter losgetrokken, de actuele repo is: ![hier](https://github.com/HKV-products-services/talk-with-fews) te vinden. 
-> Actiepunt: later volledig lostrekken.
+To manage the environment we use Pixi.
 
-## aantekeningen
+<details>
+<summary>windows</summary>
 
-![Config Vis Datamodel](ConfigVisDatamodel.png)
+```powershell
+iwr -useb https://pixi.sh/install.ps1 | iex
+```
 
-2024-02-11
+</details>
 
-Zie explore. Waarom zijn er 5 call stacks met wf_DebietBerekening?
+<details>
+<summary>Linux/Mac</summary>
 
-2024-02-12
+```bash
+curl -fsSL https://pixi.sh/install.sh | bash
+```
 
-Die call stacks zijn wsl goed. Elke module binnen een wf krijgt namelijk een eigen call stack en dat is terecht. Alleen dit deel moet even goed anders: de volgorde van het aanroepen van modules binnen en wf is van belang wanneer er temporaries worden doorgegeven naar een volgende module. Dit is een case die nu nog niet ondersteund wordt.
+</details>
 
-De betere manier is om in de call stacks per wf vanuit de descriptor de volgorde van modins call vast te leggen. Temporaries kunnen dan op een andere manier door gegeven worden en hoeven niet de database in.
+### installing
 
-## How to run?
+With the `Pixi` command in powershell install the python environment:
+
+```bash
+ cd ../python_package_template
+ pixi install
+```
+
+The `pixi.lock` file loads the correct packages and downloads to the `.pixi` file, you can use this environment in developing and resting.
+
+#### How to run when developing?
 
 ```bash
 pixi install
