@@ -25,20 +25,23 @@ class TimeseriesSetParser:
     @staticmethod
     def parse_timestep_id_file(tsid_path, logger):
         logger.debug(f"Parsing {tsid_path}")
-        tsid_root = ET.parse(tsid_path).getroot()
-        for ts in tsid_root.findall('fews:timeStep', ns):
-            timestep = {'multiplier': "", 'unit': "", 'timeZone': ""}
-            [timestep.update({key: value}) for key, value in ts.attrib.items()]
-            timestepstring = "{}{}{}".format(timestep['multiplier'], timestep['unit'], timestep['timeZone'])
-            if 'monthDays' in timestep.keys():
-                timestepstring = "{}{}".format(timestepstring, timestep['monthDays'])
-            tsid_map[timestep['id']] = timestepstring
-        
-        for ymw_ts in ("yearlyTimeStep", "monthlyTimeStep", "weeklyTimeStep"):
-            for ts in tsid_root.findall(f"fews:{ymw_ts}", ns):
-                ts_id = ts.get('id')
-                timestepstring = "{}_{}".format(ymw_ts, ts_id)
-                tsid_map[ts_id] = timestepstring
+        try:
+            tsid_root = ET.parse(tsid_path).getroot()
+            for ts in tsid_root.findall('fews:timeStep', ns):
+                timestep = {'multiplier': "", 'unit': "", 'timeZone': ""}
+                [timestep.update({key: value}) for key, value in ts.attrib.items()]
+                timestepstring = "{}{}{}".format(timestep['multiplier'], timestep['unit'], timestep['timeZone'])
+                if 'monthDays' in timestep.keys():
+                    timestepstring = "{}{}".format(timestepstring, timestep['monthDays'])
+                tsid_map[timestep['id']] = timestepstring
+            
+            for ymw_ts in ("yearlyTimeStep", "monthlyTimeStep", "weeklyTimeStep"):
+                for ts in tsid_root.findall(f"fews:{ymw_ts}", ns):
+                    ts_id = ts.get('id')
+                    timestepstring = "{}_{}".format(ymw_ts, ts_id)
+                    tsid_map[ts_id] = timestepstring
+        except FileNotFoundError:
+            logger.warning(f"TimeSteps.xml not found in {tsid_path.parent}, skipping timestep parsing")
 
     @staticmethod
     def parse_tss(root_tss, props, mic_id = ""):
@@ -122,8 +125,19 @@ class ModuleInstanceDescriptorParser:
     def parse_moduleinstances_file(db, config_root, logger):
         mid_path = config_root / "RegionConfigFiles/ModuleInstanceDescriptors.xml" 
         logger.debug(f"Parsing {mid_path}")
-        mid_root = ET.parse(mid_path).getroot()
+        try: 
+            mid_root = ET.parse(mid_path).getroot()
+            ModuleInstanceDescriptorParser.parse_moduleinstances(db, mid_root, config_root, logger)
 
+        except FileNotFoundError:
+            logger.warning(f"ModuleInstanceDescriptors.xml not found in {mid_path.parent}, checking subdirectories for ModuleInstanceDescriptors*.xml files")
+            for mid_filepath in config_root.glob("**/ModuleInstanceDescriptors*.xml"):
+                logger.debug(f"Parsing {mid_filepath}")
+                mid_root = ET.parse(mid_filepath).getroot()
+                ModuleInstanceDescriptorParser.parse_moduleinstances(db, mid_root,config_root, logger)
+
+    @staticmethod
+    def parse_moduleinstances(db, mid_root, config_root, logger):
         mid_csv = mid_root.find('fews:moduleInstanceDescriptorsCsvFile', ns)
         if mid_csv is None:
             for mid in mid_root.findall('fews:moduleInstanceDescriptor', ns):
@@ -141,15 +155,26 @@ class ModuleInstanceDescriptorParser:
             id_column_str = mid_csv.find('fews:id', ns).text
             id_column = re.search(r"%(.+?)%", id_column_str).group(1)
 
-            csv_path = config_root / "MapLayerFiles" / moduleInstanceDescriptorsCsvFile
+            maplayerfiles_path = config_root / "MapLayerFiles"
+            csv_path = maplayerfiles_path / moduleInstanceDescriptorsCsvFile
             if csv_path.suffix != '.csv':
                 csv_path = config_root / "MapLayerFiles" / (moduleInstanceDescriptorsCsvFile + '.csv')
+            try: 
+                with open(csv_path, 'r') as fin:
+                    dr = csv.DictReader(fin)
+                    for i in dr:
+                        db.mid_insert(i[id_column], i[id_column], logger)
+                        logger.debug("parse_moduleinstances_file: adding moduleInstanceDescriptor {i[id_column]}")
+            except FileNotFoundError:
+                logger.warning(f"ModuleInstanceDescriptors CSV file {csv_path} not found, checking subdirectories for {moduleInstanceDescriptorsCsvFile}*.csv files")
+                for csv_filepath in maplayerfiles_path.glob(f"**/{moduleInstanceDescriptorsCsvFile}*.csv"):
+                    logger.debug(f"Parsing {csv_filepath}")
+                    with open(csv_filepath, 'r') as fin:
+                        dr = csv.DictReader(fin)
+                        for i in dr:
+                            db.mid_insert(i[id_column], i[id_column], logger)
+                            logger.debug("parse_moduleinstances_file: adding moduleInstanceDescriptor {i[id_column]}")
 
-            with open(csv_path, 'r') as fin:
-                dr = csv.DictReader(fin)
-                for i in dr:
-                    db.mid_insert(i[id_column], i[id_column], logger)
-                    logger.debug("parse_moduleinstances_file: adding moduleInstanceDescriptor {i[id_column]}")
 
 class ModuleInstanceSetsParser:
     def parse_moduleinstancesets_file(db, config_root, logger):
@@ -172,8 +197,20 @@ class ModuleInstanceSetsParser:
 class Workflows_parser:
     @staticmethod
     def parse_workflow_descriptors(config_root, db, logger):
-        root = ET.parse(config_root/"RegionConfigFiles/WorkflowDescriptors.xml").getroot()
+        try:
+            root = ET.parse(config_root/"RegionConfigFiles/WorkflowDescriptors.xml").getroot()
+            Workflows_parser.parse_workflowfiles(root, db, logger)
+            
+        except FileNotFoundError:
+            logger.info(f"WorkflowDescriptors.xml not found in {config_root}/RegionConfigFiles, checking subdirectories for WorkflowDescriptors*.xml files")
+            for cf_filepath in config_root.glob("**/WorkflowDescriptors*.xml"):
+                logger.info(f"Parsing {cf_filepath}")
+                root = ET.parse(cf_filepath).getroot()
+                Workflows_parser.parse_workflowfiles(root, db, logger)
 
+
+    @staticmethod
+    def parse_workflowfiles(root, db, logger):
         for wfd in root.findall('fews:workflowDescriptor', ns):
             wf_id = wfd.attrib["id"]
             try:
@@ -385,6 +422,11 @@ class Modins_parser:
             mi_file_path = Modins_parser.get_path_of_modinsfile(config_root, modins_fn)
             config_file = (mi_file_path.as_posix()).replace(config_root.as_posix(), "")
             mi_root = ET.parse(mi_file_path).getroot()
+
+            # Defaults for modules without transformations (general adapter, import, export, ...).
+            # Transformation modules overwrite these per transformation.
+            trafo_id = modins_fn
+            trafo_description = mi_root.tag.split('}')[-1]
 
             if mi_root.tag == r'{http://www.wldelft.nl/fews}transformationModule':
                 # collect variables
